@@ -198,6 +198,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get template by ID
+  app.get("/api/templates/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid template ID" });
+      }
+      
+      const template = await storage.getTemplateById(id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch template" });
+    }
+  });
+  
+  // Update template
+  app.put("/api/templates/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid template ID" });
+      }
+      
+      const { title, type, content } = req.body;
+      if (!title || !type || !content) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      const updatedTemplate = await storage.updateTemplate(id, { title, type, content });
+      if (!updatedTemplate) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      res.json(updatedTemplate);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update template" });
+    }
+  });
+  
+  // Delete template
+  app.delete("/api/templates/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid template ID" });
+      }
+      
+      // Update the storage interface to support deleteTemplate
+      const success = await storage.deleteTemplate(id);
+      if (!success) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      res.status(200).json({ message: "Template deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+  
   // Create new handover log
   app.post("/api/handovers", async (req, res) => {
     try {

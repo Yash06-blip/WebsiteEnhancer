@@ -59,6 +59,7 @@ export interface IStorage {
   getTemplatesByType(type: string): Promise<Template[]>;
   createTemplate(template: InsertTemplate): Promise<Template>;
   updateTemplate(id: number, template: Partial<InsertTemplate>): Promise<Template | undefined>;
+  deleteTemplate(id: number): Promise<boolean>;
   
   // AI analysis operations
   getAiAnalysisByLogId(logId: number): Promise<AiAnalysis | undefined>;
@@ -294,6 +295,12 @@ export class MemStorage implements IStorage {
     const updatedTemplate = { ...template, ...templateUpdate, updatedAt: new Date() };
     this.templates.set(id, updatedTemplate);
     return updatedTemplate;
+  }
+  
+  async deleteTemplate(id: number): Promise<boolean> {
+    if (!this.templates.has(id)) return false;
+    
+    return this.templates.delete(id);
   }
 
   // AI analysis operations
@@ -769,6 +776,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(templates.id, id))
       .returning();
     return updatedTemplate;
+  }
+  
+  async deleteTemplate(id: number): Promise<boolean> {
+    const result = await db
+      .delete(templates)
+      .where(eq(templates.id, id));
+    
+    return result.rowCount > 0;
   }
 
   // AI analysis operations
