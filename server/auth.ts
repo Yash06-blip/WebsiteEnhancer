@@ -80,7 +80,7 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const { username, password, fullName, role } = req.body;
+      const { username, password, fullName, role, role_id } = req.body;
       
       if (!username || !password || !fullName) {
         return res.status(400).json({ message: "All fields are required" });
@@ -94,11 +94,25 @@ export function setupAuth(app: Express) {
       // Generate initials from full name
       const initials = generateInitials(fullName);
       
+      // Handle role - ensure it's a number
+      let roleValue = 2; // Default to miner role
+      
+      if (role_id !== undefined) {
+        roleValue = Number(role_id); // Convert to number
+      } else if (role !== undefined) {
+        // For backward compatibility
+        if (typeof role === 'string') {
+          roleValue = role === 'manager' ? 1 : 2;
+        } else {
+          roleValue = Number(role);
+        }
+      }
+      
       const user = await storage.createUser({
         username,
         password: await hashPassword(password),
         fullName,
-        role: role || 2, // Default to miner role
+        role: roleValue,
         initials,
         email: req.body.email || null,
         contact: req.body.contact || null

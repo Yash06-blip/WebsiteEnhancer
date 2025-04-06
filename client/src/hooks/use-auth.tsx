@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { getQueryFn } from "@/lib/queryUtils";
 import { useToast } from "@/hooks/use-toast";
 
 interface User {
@@ -23,6 +24,7 @@ interface RegisterData extends LoginCredentials {
   email?: string;
   contact?: string;
   role?: 'manager' | 'miner';
+  role_id?: number; // New role_id field as a number
 }
 
 interface AuthContextType {
@@ -73,10 +75,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterData) => {
-      const res = await apiRequest('POST', '/api/register', {
-        ...data,
-        role_id: data.role === 'manager' ? 1 : 2,
-      });
+      // Handle role conversions
+      const payload: any = { ...data };
+      
+      // If data contains role_id, use it directly
+      if (data.role_id !== undefined) {
+        // Keep the role_id as is, it should already be a number
+      } 
+      // Otherwise, if it contains string role, convert it to a number
+      else if (data.role !== undefined) {
+        payload.role_id = data.role === 'manager' ? 1 : 2;
+      }
+      // If neither is present, default to miner (2)
+      else {
+        payload.role_id = 2;
+      }
+      
+      const res = await apiRequest('POST', '/api/register', payload);
       return res.json();
     },
     onSuccess: () => {
@@ -161,21 +176,4 @@ export function useAuth() {
   return context;
 }
 
-type UnauthorizedBehavior = "returnNull" | "throw";
-export const getQueryFn = <T,>({ on401 }: { on401: UnauthorizedBehavior }) => 
-  async ({ queryKey }: { queryKey: unknown[] }) => {
-    const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
-    });
 
-    if (on401 === "returnNull" && res.status === 401) {
-      return null;
-    }
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || res.statusText);
-    }
-    
-    return await res.json() as T;
-  };
