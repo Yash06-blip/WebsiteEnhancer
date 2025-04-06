@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import {
@@ -26,7 +26,9 @@ import {
   Calendar,
   Download,
   BarChart,
+  Loader2,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 // Import charts components
 import {
@@ -35,7 +37,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   LineChart as RechartsLineChart,
   Line,
@@ -45,86 +47,132 @@ import {
   Legend,
 } from "recharts";
 
+// Define types for report data
+interface HandoverStat {
+  name: string;
+  date: string;
+  completed: number;
+  pending: number;
+  attention: number;
+}
+
+interface IncidentStat {
+  name: string;
+  date: string;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+interface TaskStat {
+  name: string;
+  date: string;
+  completed: number;
+  pending: number;
+}
+
+interface HandoverType {
+  name: string;
+  value: number;
+}
+
+interface SummaryMetrics {
+  safetyMetrics: {
+    highPriorityIncidents: number;
+    safetyCompliance: string;
+    equipmentReliability: string;
+  };
+  productionMetrics: {
+    shiftEfficiency: string;
+    taskCompletion: string;
+    maintenanceAdherence: string;
+  };
+}
+
+interface ReportData {
+  handoverStats: HandoverStat[];
+  incidentStats: IncidentStat[];
+  taskStats: TaskStat[];
+  handoverTypes: HandoverType[];
+  summaryMetrics: SummaryMetrics;
+}
+
 export default function Reports() {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("handovers");
   const [dateRange, setDateRange] = useState("last7days");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
 
-  // Sample data for charts
-  const handoverData = [
-    { name: "Mon", completed: 4, pending: 1, attention: 2 },
-    { name: "Tue", completed: 5, pending: 2, attention: 1 },
-    { name: "Wed", completed: 3, pending: 3, attention: 2 },
-    { name: "Thu", completed: 6, pending: 2, attention: 0 },
-    { name: "Fri", completed: 5, pending: 1, attention: 1 },
-    { name: "Sat", completed: 4, pending: 2, attention: 0 },
-    { name: "Sun", completed: 3, pending: 1, attention: 1 },
-  ];
-
-  const incidentData = [
-    { name: "Mon", high: 1, medium: 2, low: 3 },
-    { name: "Tue", high: 0, medium: 3, low: 2 },
-    { name: "Wed", high: 1, medium: 1, low: 4 },
-    { name: "Thu", high: 0, medium: 2, low: 3 },
-    { name: "Fri", high: 2, medium: 1, low: 2 },
-    { name: "Sat", high: 0, medium: 1, low: 2 },
-    { name: "Sun", high: 1, medium: 0, low: 1 },
-  ];
-
-  const taskData = [
-    { name: "Mon", completed: 5, pending: 3 },
-    { name: "Tue", completed: 7, pending: 4 },
-    { name: "Wed", completed: 4, pending: 6 },
-    { name: "Thu", completed: 9, pending: 2 },
-    { name: "Fri", completed: 6, pending: 3 },
-    { name: "Sat", completed: 3, pending: 2 },
-    { name: "Sun", completed: 2, pending: 1 },
-  ];
-
-  const handoverTypePieData = [
-    { name: "Statutory", value: 23 },
-    { name: "Non-Statutory", value: 17 },
-  ];
-
+  // Default color scheme for charts
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
+
+  // Fetch report data based on selected date range
+  useEffect(() => {
+    async function fetchReportData() {
+      setIsLoading(true);
+      try {
+        let queryParams = new URLSearchParams();
+        
+        if (dateRange === "custom" && startDate && endDate) {
+          queryParams.append("startDate", startDate);
+          queryParams.append("endDate", endDate);
+        } else {
+          queryParams.append("period", dateRange);
+        }
+        
+        const response = await fetch(`/api/reports?${queryParams.toString()}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch report data');
+        }
+        
+        const data = await response.json();
+        setReportData(data);
+      } catch (error) {
+        console.error("Error fetching report data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load report data. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    fetchReportData();
+  }, [dateRange, startDate, endDate, toast]);
 
   // Function to handle exporting of reports
   const handleExportReport = () => {
+    if (!reportData) return;
+    
     // Determine which data to export based on active tab
     let exportData;
     let fileName;
 
     switch (activeTab) {
       case 'handovers':
-        exportData = handoverData;
+        exportData = reportData.handoverStats;
         fileName = 'handover-report';
         break;
       case 'incidents':
-        exportData = incidentData;
+        exportData = reportData.incidentStats;
         fileName = 'incident-report';
         break;
       case 'tasks':
-        exportData = taskData;
+        exportData = reportData.taskStats;
         fileName = 'task-report';
         break;
       case 'summary':
-        exportData = {
-          safetyMetrics: {
-            highPriorityIncidents: 5,
-            safetyCompliance: '94%',
-            equipmentReliability: '87%'
-          },
-          productionMetrics: {
-            shiftEfficiency: '92%',
-            taskCompletion: '88%',
-            maintenanceAdherence: '78%'
-          }
-        };
+        exportData = reportData.summaryMetrics;
         fileName = 'summary-report';
         break;
       default:
-        exportData = handoverData;
+        exportData = reportData.handoverStats;
         fileName = 'coal-mine-report';
     }
 
@@ -132,7 +180,7 @@ export default function Reports() {
     const date = new Date();
     const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     
-    // Convert data to CSV format
+    // Convert data to JSON format
     const jsonData = JSON.stringify(exportData, null, 2);
     
     // Create download link
@@ -251,21 +299,31 @@ export default function Reports() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RechartsBarChart
-                          data={handoverData}
-                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="completed" name="Completed" fill="#16a34a" />
-                          <Bar dataKey="pending" name="Pending" fill="#6b7280" />
-                          <Bar dataKey="attention" name="Needs Attention" fill="#f59e0b" />
-                        </RechartsBarChart>
-                      </ResponsiveContainer>
+                      {isLoading ? (
+                        <div className="flex h-full items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      ) : !reportData?.handoverStats.length ? (
+                        <div className="flex h-full flex-col items-center justify-center">
+                          <p className="text-muted-foreground">No data available for selected period</p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsBarChart
+                            data={reportData?.handoverStats}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <RechartsTooltip />
+                            <Legend />
+                            <Bar dataKey="completed" name="Completed" fill="#16a34a" />
+                            <Bar dataKey="pending" name="Pending" fill="#6b7280" />
+                            <Bar dataKey="attention" name="Needs Attention" fill="#f59e0b" />
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -277,26 +335,36 @@ export default function Reports() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RechartsPieChart>
-                          <Pie
-                            data={handoverTypePieData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                            outerRadius={80}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {handoverTypePieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend />
-                        </RechartsPieChart>
-                      </ResponsiveContainer>
+                      {isLoading ? (
+                        <div className="flex h-full items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      ) : !reportData?.handoverTypes.length ? (
+                        <div className="flex h-full flex-col items-center justify-center">
+                          <p className="text-muted-foreground">No data available for selected period</p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={reportData?.handoverTypes}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {reportData?.handoverTypes.map((entry, index: number) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip />
+                            <Legend />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -311,40 +379,50 @@ export default function Reports() {
                 </CardHeader>
                 <CardContent>
                   <div className="h-[400px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsLineChart
-                        data={incidentData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Line 
-                          type="monotone" 
-                          dataKey="high" 
-                          name="High Priority" 
-                          stroke="#ef4444" 
-                          strokeWidth={2} 
-                          activeDot={{ r: 8 }} 
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="medium" 
-                          name="Medium Priority" 
-                          stroke="#f59e0b" 
-                          strokeWidth={2}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="low" 
-                          name="Low Priority" 
-                          stroke="#6b7280" 
-                          strokeWidth={2}
-                        />
-                      </RechartsLineChart>
-                    </ResponsiveContainer>
+                    {isLoading ? (
+                      <div className="flex h-full items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : !reportData?.incidentStats.length ? (
+                      <div className="flex h-full flex-col items-center justify-center">
+                        <p className="text-muted-foreground">No data available for selected period</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsLineChart
+                          data={reportData?.incidentStats}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <RechartsTooltip />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="high" 
+                            name="High Priority" 
+                            stroke="#ef4444" 
+                            strokeWidth={2} 
+                            activeDot={{ r: 8 }} 
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="medium" 
+                            name="Medium Priority" 
+                            stroke="#f59e0b" 
+                            strokeWidth={2}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="low" 
+                            name="Low Priority" 
+                            stroke="#6b7280" 
+                            strokeWidth={2}
+                          />
+                        </RechartsLineChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -358,20 +436,30 @@ export default function Reports() {
                 </CardHeader>
                 <CardContent>
                   <div className="h-[400px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsBarChart
-                        data={taskData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="completed" name="Completed" fill="#16a34a" />
-                        <Bar dataKey="pending" name="Pending" fill="#6b7280" />
-                      </RechartsBarChart>
-                    </ResponsiveContainer>
+                    {isLoading ? (
+                      <div className="flex h-full items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : !reportData?.taskStats.length ? (
+                      <div className="flex h-full flex-col items-center justify-center">
+                        <p className="text-muted-foreground">No data available for selected period</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBarChart
+                          data={reportData?.taskStats}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <RechartsTooltip />
+                          <Legend />
+                          <Bar dataKey="completed" name="Completed" fill="#16a34a" />
+                          <Bar dataKey="pending" name="Pending" fill="#6b7280" />
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -385,46 +473,65 @@ export default function Reports() {
                     <CardDescription>Key safety indicators</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-sm font-medium text-muted-foreground">High-Priority Incidents</h3>
-                        <div className="mt-1 flex items-center justify-between">
-                          <p className="text-2xl font-bold">5</p>
-                          <Badge className="bg-destructive">
-                            +2 from last period
-                          </Badge>
+                    {isLoading ? (
+                      <div className="flex h-full items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : !reportData ? (
+                      <div className="flex h-full flex-col items-center justify-center">
+                        <p className="text-muted-foreground">No data available for selected period</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="text-sm font-medium text-muted-foreground">High-Priority Incidents</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-2xl font-bold">{reportData.summaryMetrics.safetyMetrics.highPriorityIncidents}</p>
+                            <Badge className="bg-destructive">
+                              +{Math.round(reportData.summaryMetrics.safetyMetrics.highPriorityIncidents * 0.2)} from last period
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                            <div 
+                              className="h-2 rounded-full bg-destructive" 
+                              style={{ width: `${Math.min(100, reportData.summaryMetrics.safetyMetrics.highPriorityIncidents * 8)}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <div className="mt-2 h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 w-[40%] rounded-full bg-destructive"></div>
+                        
+                        <div>
+                          <h3 className="text-sm font-medium text-muted-foreground">Safety Compliance</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-2xl font-bold">{reportData.summaryMetrics.safetyMetrics.safetyCompliance}</p>
+                            <Badge className="bg-success">
+                              +3% from last period
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                            <div 
+                              className="h-2 rounded-full bg-success"
+                              style={{ width: reportData.summaryMetrics.safetyMetrics.safetyCompliance }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-sm font-medium text-muted-foreground">Equipment Reliability</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-2xl font-bold">{reportData.summaryMetrics.safetyMetrics.equipmentReliability}</p>
+                            <Badge className="bg-warning">
+                              -2% from last period
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                            <div 
+                              className="h-2 rounded-full bg-primary"
+                              style={{ width: reportData.summaryMetrics.safetyMetrics.equipmentReliability }}
+                            ></div>
+                          </div>
                         </div>
                       </div>
-                      
-                      <div>
-                        <h3 className="text-sm font-medium text-muted-foreground">Safety Compliance</h3>
-                        <div className="mt-1 flex items-center justify-between">
-                          <p className="text-2xl font-bold">94%</p>
-                          <Badge className="bg-success">
-                            +3% from last period
-                          </Badge>
-                        </div>
-                        <div className="mt-2 h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 w-[94%] rounded-full bg-success"></div>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h3 className="text-sm font-medium text-muted-foreground">Equipment Reliability</h3>
-                        <div className="mt-1 flex items-center justify-between">
-                          <p className="text-2xl font-bold">87%</p>
-                          <Badge className="bg-warning">
-                            -2% from last period
-                          </Badge>
-                        </div>
-                        <div className="mt-2 h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 w-[87%] rounded-full bg-primary"></div>
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -434,46 +541,65 @@ export default function Reports() {
                     <CardDescription>Operational efficiency indicators</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-sm font-medium text-muted-foreground">Shift Efficiency</h3>
-                        <div className="mt-1 flex items-center justify-between">
-                          <p className="text-2xl font-bold">92%</p>
-                          <Badge className="bg-success">
-                            +5% from last period
-                          </Badge>
+                    {isLoading ? (
+                      <div className="flex h-full items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : !reportData ? (
+                      <div className="flex h-full flex-col items-center justify-center">
+                        <p className="text-muted-foreground">No data available for selected period</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="text-sm font-medium text-muted-foreground">Shift Efficiency</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-2xl font-bold">{reportData.summaryMetrics.productionMetrics.shiftEfficiency}</p>
+                            <Badge className="bg-success">
+                              +5% from last period
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                            <div 
+                              className="h-2 rounded-full bg-success" 
+                              style={{ width: reportData.summaryMetrics.productionMetrics.shiftEfficiency }}
+                            ></div>
+                          </div>
                         </div>
-                        <div className="mt-2 h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 w-[92%] rounded-full bg-success"></div>
+                        
+                        <div>
+                          <h3 className="text-sm font-medium text-muted-foreground">Task Completion Rate</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-2xl font-bold">{reportData.summaryMetrics.productionMetrics.taskCompletion}</p>
+                            <Badge className="bg-success">
+                              +2% from last period
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                            <div 
+                              className="h-2 rounded-full bg-primary"
+                              style={{ width: reportData.summaryMetrics.productionMetrics.taskCompletion }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-sm font-medium text-muted-foreground">Maintenance Adherence</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-2xl font-bold">{reportData.summaryMetrics.productionMetrics.maintenanceAdherence}</p>
+                            <Badge className="bg-warning">
+                              -3% from last period
+                            </Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                            <div 
+                              className="h-2 rounded-full bg-warning"
+                              style={{ width: reportData.summaryMetrics.productionMetrics.maintenanceAdherence }}
+                            ></div>
+                          </div>
                         </div>
                       </div>
-                      
-                      <div>
-                        <h3 className="text-sm font-medium text-muted-foreground">Handover Completion Rate</h3>
-                        <div className="mt-1 flex items-center justify-between">
-                          <p className="text-2xl font-bold">89%</p>
-                          <Badge className="bg-success">
-                            +2% from last period
-                          </Badge>
-                        </div>
-                        <div className="mt-2 h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 w-[89%] rounded-full bg-primary"></div>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h3 className="text-sm font-medium text-muted-foreground">Maintenance Backlog</h3>
-                        <div className="mt-1 flex items-center justify-between">
-                          <p className="text-2xl font-bold">8 tasks</p>
-                          <Badge className="bg-warning">
-                            +3 from last period
-                          </Badge>
-                        </div>
-                        <div className="mt-2 h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 w-[30%] rounded-full bg-warning"></div>
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>

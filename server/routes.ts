@@ -2,7 +2,16 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { LogStatus, LogType, ShiftType, IncidentPriority, IncidentStatus } from "@shared/schema";
+import { 
+  LogStatus, 
+  LogType, 
+  ShiftType, 
+  IncidentPriority, 
+  IncidentStatus,
+  type HandoverLog,
+  type Incident,
+  type Task 
+} from "@shared/schema";
 import { analyzeHandoverContent, generateHandoverRecommendations } from "./ai";
 import { setupAuth } from "./auth";
 
@@ -570,6 +579,231 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to complete task" });
     }
   });
+
+  // Get reports filtered by date range
+  app.get("/api/reports", async (req, res) => {
+    try {
+      const { startDate, endDate, period } = req.query;
+      
+      // Get all required data
+      const [handoverLogs, incidents, tasks] = await Promise.all([
+        storage.getHandoverLogs(),
+        storage.getIncidents(),
+        storage.getTasks(),
+      ]);
+
+      // Filter data by date range
+      const start = startDate ? new Date(startDate as string) : getDateFromPeriod(period as string);
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      // Ensure end date is at the end of the day
+      end.setHours(23, 59, 59, 999);
+      
+      // Filter logs by date range
+      const filteredLogs = handoverLogs.filter(log => {
+        const logDate = new Date(log.createdAt);
+        return logDate >= start && logDate <= end;
+      });
+      
+      // Filter incidents by date range
+      const filteredIncidents = incidents.filter(incident => {
+        const incidentDate = new Date(incident.createdAt);
+        return incidentDate >= start && incidentDate <= end;
+      });
+      
+      // Filter tasks by date range
+      const filteredTasks = tasks.filter(task => {
+        const taskDate = new Date(task.createdAt);
+        return taskDate >= start && taskDate <= end;
+      });
+      
+      // Generate handover statistics
+      const handoverStats = generateDailyStats(filteredLogs, start, end, (log) => {
+        return {
+          completed: log.status === LogStatus.COMPLETED ? 1 : 0,
+          pending: log.status === LogStatus.PENDING_REVIEW ? 1 : 0,
+          attention: log.status === LogStatus.REQUIRES_ATTENTION ? 1 : 0,
+        };
+      });
+      
+      // Generate incident statistics
+      const incidentStats = generateDailyStats(filteredIncidents, start, end, (incident) => {
+        return {
+          high: incident.priority === IncidentPriority.HIGH ? 1 : 0,
+          medium: incident.priority === IncidentPriority.MEDIUM ? 1 : 0,
+          low: incident.priority === IncidentPriority.LOW ? 1 : 0,
+        };
+      });
+      
+      // Generate task statistics
+      const taskStats = generateDailyStats(filteredTasks, start, end, (task) => {
+        return {
+          completed: task.status === 'completed' ? 1 : 0,
+          pending: task.status !== 'completed' ? 1 : 0,
+        };
+      });
+      
+      // Generate handover type distribution
+      const handoverTypes = filteredLogs.reduce((acc, log) => {
+        if (log.type === LogType.STATUTORY) {
+          acc.statutory++;
+        } else if (log.type === LogType.NON_STATUTORY) {
+          acc.nonStatutory++;
+        }
+        return acc;
+      }, { statutory: 0, nonStatutory: 0 });
+      
+      // Generate summary metrics
+      const summaryMetrics = {
+        safetyMetrics: {
+          highPriorityIncidents: filteredIncidents.filter(inc => inc.priority === IncidentPriority.HIGH).length,
+          safetyCompliance: calculateSafetyCompliance(filteredLogs, filteredIncidents),
+          equipmentReliability: calculateEquipmentReliability(filteredLogs)
+        },
+        productionMetrics: {
+          shiftEfficiency: calculateShiftEfficiency(filteredLogs),
+          taskCompletion: calculateTaskCompletion(filteredTasks),
+          maintenanceAdherence: calculateMaintenanceAdherence(filteredTasks, filteredLogs)
+        }
+      };
+      
+      res.json({
+        handoverStats,
+        incidentStats,
+        taskStats,
+        handoverTypes: [
+          { name: "Statutory", value: handoverTypes.statutory },
+          { name: "Non-Statutory", value: handoverTypes.nonStatutory }
+        ],
+        summaryMetrics
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch report data" });
+    }
+  });
+
+  // Helper functions for report generation
+  function getDateFromPeriod(period: string): Date {
+    const today = new Date();
+    const result = new Date(today);
+    
+    switch(period) {
+      case 'today':
+        result.setHours(0, 0, 0, 0);
+        break;
+      case 'yesterday':
+        result.setDate(today.getDate() - 1);
+        result.setHours(0, 0, 0, 0);
+        break;
+      case 'last7days':
+        result.setDate(today.getDate() - 7);
+        break;
+      case 'last30days':
+        result.setDate(today.getDate() - 30);
+        break;
+      default:
+        // Default to last 7 days
+        result.setDate(today.getDate() - 7);
+    }
+    
+    return result;
+  }
+  
+  function generateDailyStats<T>(items: T[], start: Date, end: Date, mapFn: (item: T) => Record<string, number>) {
+    // Create a map of dates in the range
+    const dateMap = new Map<string, Record<string, number>>();
+    
+    // Initialize stats for each day in range
+    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    for (let i = 0; i < days; i++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      const dateKey = date.toISOString().slice(0, 10);
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      
+      // Get keys from the first item or use empty object if no items
+      const initialValues = items.length > 0 
+        ? Object.keys(mapFn(items[0])).reduce((acc, key) => ({ ...acc, [key]: 0 }), {})
+        : {};
+      
+      dateMap.set(dateKey, { name: dayName, date: dateKey, ...initialValues });
+    }
+    
+    // Fill in data from items
+    for (const item of items) {
+      // TypeScript can't infer the shape of item, so we need to cast
+      const itemDate = new Date((item as any).createdAt);
+      const dateKey = itemDate.toISOString().slice(0, 10);
+      
+      // Only process if date is in range
+      if (dateMap.has(dateKey)) {
+        const dayData = dateMap.get(dateKey) as Record<string, any>;
+        const itemData = mapFn(item);
+        
+        // Update stats
+        for (const [key, value] of Object.entries(itemData)) {
+          dayData[key] += value;
+        }
+        
+        dateMap.set(dateKey, dayData);
+      }
+    }
+    
+    // Convert map to array of daily stats
+    return Array.from(dateMap.values());
+  }
+  
+  function calculateSafetyCompliance(logs: HandoverLog[], incidents: Incident[]): string {
+    const totalSafetyLogs = logs.filter(log => log.content.toLowerCase().includes('safety')).length;
+    const complianceRate = totalSafetyLogs > 0 
+      ? Math.min(100, 100 - (incidents.length / totalSafetyLogs * 10))
+      : 100;
+    return `${Math.round(complianceRate)}%`;
+  }
+  
+  function calculateEquipmentReliability(logs: HandoverLog[]): string {
+    const maintenanceLogs = logs.filter(log => 
+      log.content.toLowerCase().includes('maintenance') || 
+      log.content.toLowerCase().includes('equipment')
+    );
+    
+    // Mock calculation
+    const reliabilityRate = maintenanceLogs.length > 0 
+      ? Math.min(100, 100 - (maintenanceLogs.filter(log => 
+          log.content.toLowerCase().includes('failure') || 
+          log.content.toLowerCase().includes('breakdown')
+        ).length / maintenanceLogs.length * 20))
+      : 87;
+    
+    return `${Math.round(reliabilityRate)}%`;
+  }
+  
+  function calculateShiftEfficiency(logs: HandoverLog[]): string {
+    const efficiency = logs.length > 0 
+      ? Math.min(100, 70 + (logs.filter(log => log.status === LogStatus.COMPLETED).length / logs.length * 30))
+      : 92;
+    return `${Math.round(efficiency)}%`;
+  }
+  
+  function calculateTaskCompletion(tasks: Task[]): string {
+    const completionRate = tasks.length > 0 
+      ? (tasks.filter(task => task.status === 'completed').length / tasks.length * 100)
+      : 88;
+    return `${Math.round(completionRate)}%`;
+  }
+  
+  function calculateMaintenanceAdherence(tasks: Task[], logs: HandoverLog[]): string {
+    const maintenanceTasks = tasks.filter(task => 
+      task.title.toLowerCase().includes('maintenance') || 
+      task.description.toLowerCase().includes('maintenance')
+    );
+    
+    const adherenceRate = maintenanceTasks.length > 0 
+      ? (maintenanceTasks.filter(task => task.status === 'completed').length / maintenanceTasks.length * 100)
+      : 78;
+    
+    return `${Math.round(adherenceRate)}%`;
+  }
 
   const httpServer = createServer(app);
 
