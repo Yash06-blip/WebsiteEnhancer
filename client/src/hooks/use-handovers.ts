@@ -102,8 +102,17 @@ export function useHandovers() {
   };
 }
 
+// Type for AI analysis response
+interface AIAnalysisResponse {
+  category: string;
+  importance: "low" | "medium" | "high";
+  suggestions: string[];
+  keywords: string[];
+  followUpActions?: string[];
+}
+
 export function useHandoverAiAnalysis(logId: number | null) {
-  const { data: analysis, isLoading } = useQuery({
+  const { data: analysis, isLoading } = useQuery<AIAnalysisResponse>({
     queryKey: [`/api/ai-analysis/${logId}`],
     enabled: !!logId,
   });
@@ -114,13 +123,18 @@ export function useHandoverAiAnalysis(logId: number | null) {
   };
 }
 
+// Type for recommendations response
+interface RecommendationsResponse {
+  recommendations: string;
+}
+
 export function useAiRecommendations() {
-  const { data: recommendations, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<RecommendationsResponse>({
     queryKey: ['/api/ai-recommendations'],
   });
 
   return {
-    recommendations: recommendations?.recommendations || null,
+    recommendations: data?.recommendations || null,
     isLoading,
   };
 }

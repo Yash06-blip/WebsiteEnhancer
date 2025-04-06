@@ -17,11 +17,39 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+
+// Define interfaces for API response types
+interface AIAnalysisResponse {
+  category: string;
+  importance: "low" | "medium" | "high";
+  suggestions: string[];
+  keywords: string[];
+  followUpActions?: string[];
+}
+
+type AnalysisData = AIAnalysisResponse | undefined | null;
 
 export function AiAssistant() {
   const [selectedLog, setSelectedLog] = useState<number | null>(4); // Default to logId 4 for demo
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { analysis, isLoading: isLoadingAnalysis } = useHandoverAiAnalysis(selectedLog);
   const { recommendations, isLoading: isLoadingRecommendations } = useAiRecommendations();
+  
+  // Function to handle refreshing AI analysis
+  const handleRefreshAnalysis = () => {
+    // Invalidate the query cache to refresh data
+    queryClient.invalidateQueries({ queryKey: [`/api/ai-analysis/${selectedLog}`] });
+    queryClient.invalidateQueries({ queryKey: ['/api/ai-recommendations'] });
+    
+    toast({
+      title: "Refreshing AI Analysis",
+      description: "Updating insights based on latest data...",
+      duration: 2000,
+    });
+  };
 
   return (
     <Card className="mt-6">
@@ -40,11 +68,17 @@ export function AiAssistant() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Options</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleRefreshAnalysis}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Analysis
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => 
+              toast({
+                title: "AI Settings",
+                description: "Settings panel will be implemented in a future update.",
+                duration: 3000,
+              })
+            }>
               <Sparkles className="mr-2 h-4 w-4" />
               AI Settings
             </DropdownMenuItem>
@@ -108,7 +142,7 @@ export function AiAssistant() {
                 </div>
               ) : recommendations ? (
                 <div className="space-y-2">
-                  {recommendations.split('\n').filter(Boolean).slice(0, 3).map((suggestion, idx) => (
+                  {recommendations.split('\n').filter(Boolean).slice(0, 3).map((suggestion: string, idx: number) => (
                     <div key={idx} className="rounded-md bg-muted p-2 text-sm">
                       <div className="flex items-start gap-2">
                         <div className="flex-shrink-0 pt-0.5">

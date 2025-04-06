@@ -89,6 +89,68 @@ export default function Reports() {
 
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
 
+  // Function to handle exporting of reports
+  const handleExportReport = () => {
+    // Determine which data to export based on active tab
+    let exportData;
+    let fileName;
+
+    switch (activeTab) {
+      case 'handovers':
+        exportData = handoverData;
+        fileName = 'handover-report';
+        break;
+      case 'incidents':
+        exportData = incidentData;
+        fileName = 'incident-report';
+        break;
+      case 'tasks':
+        exportData = taskData;
+        fileName = 'task-report';
+        break;
+      case 'summary':
+        exportData = {
+          safetyMetrics: {
+            highPriorityIncidents: 5,
+            safetyCompliance: '94%',
+            equipmentReliability: '87%'
+          },
+          productionMetrics: {
+            shiftEfficiency: '92%',
+            taskCompletion: '88%',
+            maintenanceAdherence: '78%'
+          }
+        };
+        fileName = 'summary-report';
+        break;
+      default:
+        exportData = handoverData;
+        fileName = 'coal-mine-report';
+    }
+
+    // Format current date for filename
+    const date = new Date();
+    const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    
+    // Convert data to CSV format
+    const jsonData = JSON.stringify(exportData, null, 2);
+    
+    // Create download link
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName}-${formattedDate}.json`;
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />
@@ -97,7 +159,7 @@ export default function Reports() {
         <main className="flex-1 p-4 sm:p-6">
           <div className="mb-6 flex items-center justify-between">
             <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-            <Button>
+            <Button onClick={handleExportReport}>
               <Download className="mr-1 h-4 w-4" />
               Export Report
             </Button>

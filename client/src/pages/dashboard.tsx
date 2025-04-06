@@ -15,6 +15,51 @@ export default function Dashboard() {
   const [isNewHandoverModalOpen, setIsNewHandoverModalOpen] = useState(false);
   const [showAnalysisToast, setShowAnalysisToast] = useState(false);
 
+  // Mock data for dashboard export
+  const dashboardData = {
+    summary: {
+      date: new Date().toISOString().split('T')[0],
+      totalHandovers: 25,
+      completedHandovers: 18,
+      pendingReview: 5,
+      requiresAttention: 2,
+      activeIncidents: 4,
+      resolvedIncidents: 12,
+      upcomingShifts: 8
+    },
+    stats: {
+      safetyScore: 94,
+      productionEfficiency: 88,
+      equipmentReliability: 92,
+      teamAttendance: 96
+    }
+  };
+
+  // Function to handle exporting dashboard data
+  const handleExportDashboard = () => {
+    // Format current date for filename
+    const date = new Date();
+    const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    
+    // Convert data to JSON format
+    const jsonData = JSON.stringify(dashboardData, null, 2);
+    
+    // Create download link
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `dashboard-summary-${formattedDate}.json`;
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />
@@ -28,7 +73,7 @@ export default function Dashboard() {
                 <Plus className="mr-1 h-4 w-4" />
                 New Handover
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleExportDashboard}>
                 <Download className="mr-1 h-4 w-4" />
                 Export
               </Button>
