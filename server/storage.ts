@@ -6,12 +6,14 @@ import {
   shifts, type Shift, type InsertShift,
   templates, type Template, type InsertTemplate,
   aiAnalysis, type AiAnalysis, type InsertAiAnalysis,
+  attendance, type Attendance, type InsertAttendance,
+  geofenceZones, type GeofenceZone, type InsertGeofenceZone,
   LogStatus, IncidentStatus, IncidentPriority, ShiftType, LogType
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { db } from "./db";
-import { eq, desc, gt, asc } from "drizzle-orm";
+import { eq, desc, gt, asc, and, isNull, inArray, lte, gte } from "drizzle-orm";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 
@@ -66,6 +68,23 @@ export interface IStorage {
   getAiAnalysisByLogId(logId: number): Promise<AiAnalysis | undefined>;
   createAiAnalysis(analysis: InsertAiAnalysis): Promise<AiAnalysis>;
   
+  // Geofence operations
+  getGeofenceZones(): Promise<GeofenceZone[]>;
+  getGeofenceZoneById(id: number): Promise<GeofenceZone | undefined>;
+  createGeofenceZone(zone: InsertGeofenceZone): Promise<GeofenceZone>;
+  updateGeofenceZone(id: number, zone: Partial<InsertGeofenceZone>): Promise<GeofenceZone | undefined>;
+  deleteGeofenceZone(id: number): Promise<boolean>;
+  
+  // Attendance operations
+  getAttendanceRecords(): Promise<Attendance[]>;
+  getAttendanceById(id: number): Promise<Attendance | undefined>;
+  getAttendanceByUser(userId: number): Promise<Attendance[]>;
+  getAttendanceByDateRange(startDate: Date, endDate: Date): Promise<Attendance[]>;
+  getUsersCurrentlyInZone(zoneId: number): Promise<User[]>;
+  checkUserInZone(userId: number, coordinates: string): Promise<boolean>;
+  createAttendanceRecord(attendance: InsertAttendance): Promise<Attendance>;
+  updateAttendanceRecord(id: number, attendance: Partial<InsertAttendance>): Promise<Attendance | undefined>;
+  
   // Session store
   sessionStore: session.SessionStore;
 }
@@ -79,6 +98,8 @@ export class MemStorage implements IStorage {
   private shifts: Map<number, Shift>;
   private templates: Map<number, Template>;
   private aiAnalyses: Map<number, AiAnalysis>;
+  private geofenceZones: Map<number, GeofenceZone>;
+  private attendanceRecords: Map<number, Attendance>;
 
   // IDs for auto-increment
   private userIdCounter: number;
@@ -88,6 +109,8 @@ export class MemStorage implements IStorage {
   private shiftIdCounter: number;
   private templateIdCounter: number;
   private aiAnalysisIdCounter: number;
+  private geofenceZoneIdCounter: number;
+  private attendanceIdCounter: number;
   
   sessionStore: session.SessionStore;
 
@@ -99,6 +122,8 @@ export class MemStorage implements IStorage {
     this.shifts = new Map();
     this.templates = new Map();
     this.aiAnalyses = new Map();
+    this.geofenceZones = new Map();
+    this.attendanceRecords = new Map();
     
     this.userIdCounter = 1;
     this.logIdCounter = 1;
@@ -107,6 +132,8 @@ export class MemStorage implements IStorage {
     this.shiftIdCounter = 1;
     this.templateIdCounter = 1;
     this.aiAnalysisIdCounter = 1;
+    this.geofenceZoneIdCounter = 1;
+    this.attendanceIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -356,6 +383,108 @@ export class MemStorage implements IStorage {
     this.aiAnalyses.set(id, newAnalysis);
     return newAnalysis;
   }
+  
+  // Geofence operations
+  async getGeofenceZones(): Promise<GeofenceZone[]> {
+    return Array.from(this.geofenceZones.values());
+  }
+
+  async getGeofenceZoneById(id: number): Promise<GeofenceZone | undefined> {
+    return this.geofenceZones.get(id);
+  }
+
+  async createGeofenceZone(zone: InsertGeofenceZone): Promise<GeofenceZone> {
+    const id = this.geofenceZoneIdCounter++;
+    const createdAt = new Date();
+    const updatedAt = new Date();
+    const newZone: GeofenceZone = { ...zone, id, createdAt, updatedAt };
+    this.geofenceZones.set(id, newZone);
+    return newZone;
+  }
+
+  async updateGeofenceZone(id: number, zoneUpdate: Partial<InsertGeofenceZone>): Promise<GeofenceZone | undefined> {
+    const zone = this.geofenceZones.get(id);
+    if (!zone) return undefined;
+    
+    const updatedZone = { ...zone, ...zoneUpdate, updatedAt: new Date() };
+    this.geofenceZones.set(id, updatedZone);
+    return updatedZone;
+  }
+  
+  async deleteGeofenceZone(id: number): Promise<boolean> {
+    if (!this.geofenceZones.has(id)) return false;
+    
+    return this.geofenceZones.delete(id);
+  }
+  
+  // Attendance operations
+  async getAttendanceRecords(): Promise<Attendance[]> {
+    return Array.from(this.attendanceRecords.values());
+  }
+
+  async getAttendanceById(id: number): Promise<Attendance | undefined> {
+    return this.attendanceRecords.get(id);
+  }
+
+  async getAttendanceByUser(userId: number): Promise<Attendance[]> {
+    return Array.from(this.attendanceRecords.values()).filter(
+      (record) => record.userId === userId,
+    );
+  }
+
+  async getAttendanceByDateRange(startDate: Date, endDate: Date): Promise<Attendance[]> {
+    return Array.from(this.attendanceRecords.values()).filter(
+      (record) => {
+        const recordDate = new Date(record.checkInTime);
+        return recordDate >= startDate && recordDate <= endDate;
+      }
+    );
+  }
+
+  async getUsersCurrentlyInZone(zoneId: number): Promise<User[]> {
+    // Get zone coordinates
+    const zone = this.geofenceZones.get(zoneId);
+    if (!zone) return [];
+    
+    // Get users with active attendance records (no checkout time)
+    const activeAttendanceRecords = Array.from(this.attendanceRecords.values()).filter(
+      (record) => !record.checkOutTime && record.isValid
+    );
+    
+    // Get unique user IDs from active records
+    const userIds = [...new Set(activeAttendanceRecords.map(record => record.userId))];
+    
+    // Get user objects
+    const users = userIds
+      .map(id => this.users.get(id))
+      .filter((user): user is User => user !== undefined);
+      
+    return users;
+  }
+
+  async checkUserInZone(userId: number, coordinates: string): Promise<boolean> {
+    // For demo purposes, just return true to allow check-ins
+    // In a real implementation, this would check if the provided coordinates
+    // are within any of the defined geofence zones
+    return true;
+  }
+
+  async createAttendanceRecord(attendance: InsertAttendance): Promise<Attendance> {
+    const id = this.attendanceIdCounter++;
+    const createdAt = new Date();
+    const newRecord: Attendance = { ...attendance, id, createdAt };
+    this.attendanceRecords.set(id, newRecord);
+    return newRecord;
+  }
+
+  async updateAttendanceRecord(id: number, attendanceUpdate: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    const record = this.attendanceRecords.get(id);
+    if (!record) return undefined;
+    
+    const updatedRecord = { ...record, ...attendanceUpdate };
+    this.attendanceRecords.set(id, updatedRecord);
+    return updatedRecord;
+  }
 
   // Seed with initial data for testing
   private seedData() {
@@ -578,6 +707,70 @@ export class MemStorage implements IStorage {
       suggestions: ["Increase monitoring frequency in Section B3", "Check ventilation system efficiency", "Review methane detection equipment calibration"],
       keywords: ["methane", "ventilation", "safety", "monitoring"],
       followUpActions: ["Schedule maintenance check for ventilation system", "Prepare detailed report on methane levels over past week"],
+    });
+    
+    // Create sample geofence zones
+    this.createGeofenceZone({
+      name: "Main Shaft Entry",
+      description: "The main entrance to the mine shaft",
+      coordinates: "-33.865143,151.209900;-33.864143,151.209900;-33.864143,151.210900;-33.865143,151.210900",
+      radius: 100,
+      isActive: true,
+      createdBy: 1
+    });
+    
+    this.createGeofenceZone({
+      name: "Section A Work Area",
+      description: "The working area in Section A of the mine",
+      coordinates: "-33.867143,151.211900;-33.866143,151.211900;-33.866143,151.212900;-33.867143,151.212900",
+      radius: 50,
+      isActive: true,
+      createdBy: 1
+    });
+    
+    this.createGeofenceZone({
+      name: "Equipment Storage",
+      description: "Equipment storage area with restricted access",
+      coordinates: "-33.869143,151.213900;-33.868143,151.213900;-33.868143,151.214900;-33.869143,151.214900",
+      radius: 30,
+      isActive: true,
+      createdBy: 1
+    });
+    
+    // Create sample attendance records
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    this.createAttendanceRecord({
+      userId: 1,
+      checkInTime: new Date(yesterday.setHours(8, 0, 0)),
+      checkOutTime: new Date(yesterday.setHours(16, 0, 0)),
+      location: "Main Shaft Entry",
+      coordinates: "-33.864643,151.210400",
+      deviceId: "device-001",
+      isValid: true
+    });
+    
+    this.createAttendanceRecord({
+      userId: 2,
+      checkInTime: new Date(yesterday.setHours(8, 15, 0)),
+      checkOutTime: new Date(yesterday.setHours(16, 30, 0)),
+      location: "Main Shaft Entry",
+      coordinates: "-33.864743,151.210500",
+      deviceId: "device-002",
+      isValid: true
+    });
+    
+    // Create an active attendance record (no checkout time)
+    const today = new Date();
+    this.createAttendanceRecord({
+      userId: 1,
+      checkInTime: new Date(today.setHours(8, 0, 0)),
+      checkOutTime: null,
+      location: "Section A Work Area",
+      coordinates: "-33.866643,151.212400",
+      deviceId: "device-001",
+      isValid: true
     });
   }
 }
@@ -893,6 +1086,133 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return newAnalysis;
+  }
+  
+  // Geofence operations
+  async getGeofenceZones(): Promise<GeofenceZone[]> {
+    return db.select().from(geofenceZones).orderBy(geofenceZones.name);
+  }
+
+  async getGeofenceZoneById(id: number): Promise<GeofenceZone | undefined> {
+    const results = await db.select().from(geofenceZones).where(eq(geofenceZones.id, id));
+    return results[0];
+  }
+
+  async createGeofenceZone(zone: InsertGeofenceZone): Promise<GeofenceZone> {
+    const now = new Date();
+    const [newZone] = await db
+      .insert(geofenceZones)
+      .values({
+        ...zone,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    return newZone;
+  }
+
+  async updateGeofenceZone(id: number, zoneUpdate: Partial<InsertGeofenceZone>): Promise<GeofenceZone | undefined> {
+    const now = new Date();
+    const [updatedZone] = await db
+      .update(geofenceZones)
+      .set({
+        ...zoneUpdate,
+        updatedAt: now
+      })
+      .where(eq(geofenceZones.id, id))
+      .returning();
+    return updatedZone;
+  }
+  
+  async deleteGeofenceZone(id: number): Promise<boolean> {
+    const result = await db
+      .delete(geofenceZones)
+      .where(eq(geofenceZones.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+  
+  // Attendance operations
+  async getAttendanceRecords(): Promise<Attendance[]> {
+    return db.select().from(attendance).orderBy(desc(attendance.checkInTime));
+  }
+
+  async getAttendanceById(id: number): Promise<Attendance | undefined> {
+    const results = await db.select().from(attendance).where(eq(attendance.id, id));
+    return results[0];
+  }
+
+  async getAttendanceByUser(userId: number): Promise<Attendance[]> {
+    return db.select()
+      .from(attendance)
+      .where(eq(attendance.userId, userId))
+      .orderBy(desc(attendance.checkInTime));
+  }
+
+  async getAttendanceByDateRange(startDate: Date, endDate: Date): Promise<Attendance[]> {
+    return db.select()
+      .from(attendance)
+      .where(
+        and(
+          gte(attendance.checkInTime, startDate),
+          lte(attendance.checkInTime, endDate)
+        )
+      )
+      .orderBy(desc(attendance.checkInTime));
+  }
+
+  async getUsersCurrentlyInZone(zoneId: number): Promise<User[]> {
+    // Get the zone
+    const zoneResults = await db.select().from(geofenceZones).where(eq(geofenceZones.id, zoneId));
+    const zone = zoneResults[0];
+    if (!zone) return [];
+    
+    // Get active attendance records (no checkout time)
+    const activeAttendanceRecords = await db.select()
+      .from(attendance)
+      .where(
+        and(
+          isNull(attendance.checkOutTime),
+          eq(attendance.isValid, true)
+        )
+      );
+    
+    if (activeAttendanceRecords.length === 0) return [];
+    
+    // Get unique user IDs
+    const userIds = [...new Set(activeAttendanceRecords.map(record => record.userId))];
+    
+    // Get users
+    const userResults = await db.select()
+      .from(users)
+      .where(inArray(users.id, userIds));
+      
+    return userResults;
+  }
+
+  async checkUserInZone(userId: number, coordinates: string): Promise<boolean> {
+    // For demo purposes, just return true
+    // In a real implementation, this would check if the coordinates are within any geofence zone
+    return true;
+  }
+
+  async createAttendanceRecord(attendanceData: InsertAttendance): Promise<Attendance> {
+    const [newRecord] = await db
+      .insert(attendance)
+      .values({
+        ...attendanceData,
+        createdAt: new Date()
+      })
+      .returning();
+    return newRecord;
+  }
+
+  async updateAttendanceRecord(id: number, attendanceUpdate: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    const [updatedRecord] = await db
+      .update(attendance)
+      .set(attendanceUpdate)
+      .where(eq(attendance.id, id))
+      .returning();
+    return updatedRecord;
   }
 }
 

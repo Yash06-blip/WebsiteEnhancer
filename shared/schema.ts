@@ -175,6 +175,43 @@ export const insertAiAnalysisSchema = createInsertSchema(aiAnalysis).omit({
   createdAt: true,
 });
 
+// Attendance records table
+export const attendance = pgTable("attendance", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  checkInTime: timestamp("check_in_time").defaultNow().notNull(),
+  checkOutTime: timestamp("check_out_time"),
+  location: text("location").notNull(),
+  coordinates: text("coordinates").notNull(), // Format: "latitude,longitude"
+  deviceId: text("device_id"),
+  isValid: boolean("is_valid").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAttendanceSchema = createInsertSchema(attendance).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Geofence zones table
+export const geofenceZones = pgTable("geofence_zones", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  coordinates: text("coordinates").notNull(), // Format: "lat1,lon1;lat2,lon2;lat3,lon3..." (polygon points)
+  radius: integer("radius"), // For circular zones (in meters)
+  isActive: boolean("is_active").default(true),
+  createdBy: integer("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertGeofenceZoneSchema = createInsertSchema(geofenceZones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Export types
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -196,3 +233,9 @@ export type InsertTemplate = typeof templates.$inferInsert;
 
 export type AiAnalysis = typeof aiAnalysis.$inferSelect;
 export type InsertAiAnalysis = typeof aiAnalysis.$inferInsert;
+
+export type Attendance = typeof attendance.$inferSelect;
+export type InsertAttendance = typeof attendance.$inferInsert;
+
+export type GeofenceZone = typeof geofenceZones.$inferSelect;
+export type InsertGeofenceZone = typeof geofenceZones.$inferInsert;

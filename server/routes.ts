@@ -8,9 +8,13 @@ import {
   ShiftType, 
   IncidentPriority, 
   IncidentStatus,
+  UserRole,
   type HandoverLog,
   type Incident,
-  type Task 
+  type Task,
+  insertTemplateSchema,
+  insertGeofenceZoneSchema,
+  insertAttendanceSchema
 } from "@shared/schema";
 import { analyzeHandoverContent, generateHandoverRecommendations } from "./ai";
 import { setupAuth } from "./auth";
@@ -987,6 +991,291 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ message: "Invalid update type" });
     } catch (error) {
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Geofence Zone endpoints
+  
+  // Create a new geofence zone
+  app.post("/api/geofence-zones", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Only managers can create geofence zones
+      if (req.user.role !== 1) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      const { name, description, coordinates, radius } = req.body;
+      
+      if (!name || !coordinates) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      const newZone = await storage.createGeofenceZone({
+        name,
+        description,
+        coordinates,
+        radius,
+        isActive: true,
+        createdBy: req.user.id
+      });
+      
+      res.status(201).json(newZone);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create geofence zone" });
+    }
+  });
+  
+  // Get all geofence zones
+  app.get("/api/geofence-zones", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const zones = await storage.getGeofenceZones();
+      res.json(zones);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch geofence zones" });
+    }
+  });
+  
+  // Get a specific geofence zone
+  app.get("/api/geofence-zones/:id", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const { id } = req.params;
+      const zone = await storage.getGeofenceZoneById(parseInt(id));
+      
+      if (!zone) {
+        return res.status(404).json({ message: "Geofence zone not found" });
+      }
+      
+      res.json(zone);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch geofence zone" });
+    }
+  });
+  
+  // Update a geofence zone
+  app.patch("/api/geofence-zones/:id", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Only managers can update geofence zones
+      if (req.user.role !== 1) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      const { name, description, coordinates, radius, isActive } = req.body;
+      
+      const zone = await storage.getGeofenceZoneById(parseInt(id));
+      if (!zone) {
+        return res.status(404).json({ message: "Geofence zone not found" });
+      }
+      
+      const updatedZone = await storage.updateGeofenceZone(parseInt(id), {
+        name,
+        description,
+        coordinates,
+        radius,
+        isActive
+      });
+      
+      res.json(updatedZone);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update geofence zone" });
+    }
+  });
+  
+  // Delete a geofence zone
+  app.delete("/api/geofence-zones/:id", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Only managers can delete geofence zones
+      if (req.user.role !== 1) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      
+      const zone = await storage.getGeofenceZoneById(parseInt(id));
+      if (!zone) {
+        return res.status(404).json({ message: "Geofence zone not found" });
+      }
+      
+      const deleted = await storage.deleteGeofenceZone(parseInt(id));
+      
+      if (deleted) {
+        res.sendStatus(204);
+      } else {
+        res.status(500).json({ message: "Failed to delete geofence zone" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete geofence zone" });
+    }
+  });
+  
+  // Attendance tracking endpoints
+  
+  // Record worker check-in (entering a geofence zone)
+  app.post("/api/attendance/check-in", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const { coordinates, location, deviceId } = req.body;
+      
+      if (!coordinates || !location) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Check if user is already checked in
+      const userAttendance = await storage.getAttendanceByUser(req.user.id);
+      const activeSession = userAttendance.find(a => !a.checkOutTime);
+      
+      if (activeSession) {
+        return res.status(400).json({ 
+          message: "Already checked in", 
+          attendanceId: activeSession.id 
+        });
+      }
+      
+      // Validate if the coordinates are within any active geofence zone
+      const isInZone = await storage.checkUserInZone(req.user.id, coordinates);
+      
+      const attendance = await storage.createAttendanceRecord({
+        userId: req.user.id,
+        checkInTime: new Date(),
+        checkOutTime: null,
+        location,
+        coordinates,
+        deviceId: deviceId || null,
+        isValid: isInZone
+      });
+      
+      res.status(201).json(attendance);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to record check-in" });
+    }
+  });
+  
+  // Record worker check-out (leaving a geofence zone)
+  app.post("/api/attendance/:id/check-out", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const { id } = req.params;
+      
+      const attendance = await storage.getAttendanceById(parseInt(id));
+      if (!attendance) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+      
+      // Verify that this attendance record belongs to the current user
+      if (attendance.userId !== req.user.id) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      // Verify that this attendance record is not already checked out
+      if (attendance.checkOutTime) {
+        return res.status(400).json({ message: "Already checked out" });
+      }
+      
+      const updatedAttendance = await storage.updateAttendanceRecord(parseInt(id), {
+        checkOutTime: new Date()
+      });
+      
+      res.json(updatedAttendance);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to record check-out" });
+    }
+  });
+  
+  // Get all attendance records for current user
+  app.get("/api/attendance/me", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const attendance = await storage.getAttendanceByUser(req.user.id);
+      res.json(attendance);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch attendance records" });
+    }
+  });
+  
+  // Get all attendance records by date range (managers only)
+  app.get("/api/attendance", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Only managers can see all attendance records
+      if (req.user.role !== 1) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      const { startDate, endDate } = req.query;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "Missing date range" });
+      }
+      
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      
+      // Set end date to end of day
+      end.setHours(23, 59, 59, 999);
+      
+      const attendance = await storage.getAttendanceByDateRange(start, end);
+      
+      res.json(attendance);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch attendance records" });
+    }
+  });
+  
+  // Get users currently in a specific zone (managers only)
+  app.get("/api/geofence-zones/:id/users", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      // Only managers can see users in zones
+      if (req.user.role !== 1) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      
+      const zone = await storage.getGeofenceZoneById(parseInt(id));
+      if (!zone) {
+        return res.status(404).json({ message: "Geofence zone not found" });
+      }
+      
+      const users = await storage.getUsersCurrentlyInZone(parseInt(id));
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users in zone" });
     }
   });
 

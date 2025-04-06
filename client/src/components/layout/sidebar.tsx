@@ -44,7 +44,20 @@ export function Sidebar() {
             </div>
             <div>
               <p className="text-sm font-medium">{user?.fullName}</p>
-              <p className="text-xs text-sidebar-foreground/70">{user?.role === 'manager' ? 'Mining Manager' : 'Mining Crew'}</p>
+              <p className="text-xs text-sidebar-foreground/70">
+                {user?.role === 1 
+                  ? 'Mining Manager' 
+                  : user?.role === 2 
+                    ? 'Mining Crew'
+                    : user?.role === 3 
+                      ? 'Operations Team'
+                      : user?.role === 4
+                        ? 'Drilling Specialist'
+                        : user?.role === 5
+                          ? 'Blasting Crew'
+                          : 'Mining Crew'
+                }
+              </p>
             </div>
           </div>
           <button 
