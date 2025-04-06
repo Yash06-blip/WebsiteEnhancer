@@ -32,9 +32,11 @@ import {
   Eye,
   EyeOff,
   Save,
+  MapPin,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { GeofencingSettings } from "@/components/settings/geofencing";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -223,6 +225,10 @@ export default function SettingsPage() {
                 <TabsTrigger value="appearance" className="flex gap-1">
                   <Settings className="h-4 w-4" />
                   <span>Appearance</span>
+                </TabsTrigger>
+                <TabsTrigger value="geofencing" className="flex gap-1">
+                  <MapPin className="h-4 w-4" />
+                  <span>Geofencing</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -595,6 +601,10 @@ export default function SettingsPage() {
                     </Button>
                   </CardFooter>
                 </Card>
+              </TabsContent>
+              
+              <TabsContent value="geofencing">
+                <GeofencingSettings />
               </TabsContent>
             </Tabs>
           </div>
