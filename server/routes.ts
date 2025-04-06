@@ -628,6 +628,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return taskDate >= start && taskDate <= end;
       });
       
+      // Generate placeholder data for Jan 2025 to today (April 6, 2025) if requested
+      if ((startDate && new Date(startDate as string) <= new Date('2025-04-06')) || 
+          period === 'custom' || period === 'last30days') {
+        
+        // Create placeholder dates from Jan 1, 2025 to Apr 6, 2025
+        const placeholderStart = new Date('2025-01-01');
+        const placeholderEnd = new Date('2025-04-06');
+        const dayCount = Math.round((placeholderEnd.getTime() - placeholderStart.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // Generate placeholder handover statistics
+        const placeholderHandoverStats = [];
+        for (let i = 0; i < dayCount; i++) {
+          const currentDate = new Date(placeholderStart);
+          currentDate.setDate(placeholderStart.getDate() + i);
+          const dateKey = currentDate.toISOString().slice(0, 10);
+          const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'short' });
+          
+          // Generate random values with a pattern (higher on weekdays, lower on weekends)
+          const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+          const randomFactor = isWeekend ? 0.5 : 1.0;
+          const totalLogs = Math.floor(Math.random() * 5 * randomFactor) + 3;
+          
+          placeholderHandoverStats.push({
+            name: dayName,
+            date: dateKey,
+            completed: Math.floor(totalLogs * 0.7),
+            pending: Math.floor(totalLogs * 0.2),
+            attention: Math.floor(totalLogs * 0.1)
+          });
+        }
+        
+        // Generate placeholder incident statistics
+        const placeholderIncidentStats = [];
+        for (let i = 0; i < dayCount; i++) {
+          const currentDate = new Date(placeholderStart);
+          currentDate.setDate(placeholderStart.getDate() + i);
+          const dateKey = currentDate.toISOString().slice(0, 10);
+          const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'short' });
+          
+          // Incidents are more rare, add some days with zero incidents
+          const hasIncident = Math.random() > 0.65;
+          
+          placeholderIncidentStats.push({
+            name: dayName,
+            date: dateKey,
+            high: hasIncident && Math.random() > 0.8 ? 1 : 0,
+            medium: hasIncident && Math.random() > 0.6 ? Math.floor(Math.random() * 2) : 0,
+            low: hasIncident ? Math.floor(Math.random() * 3) : 0
+          });
+        }
+        
+        // Generate placeholder task statistics
+        const placeholderTaskStats = [];
+        for (let i = 0; i < dayCount; i++) {
+          const currentDate = new Date(placeholderStart);
+          currentDate.setDate(placeholderStart.getDate() + i);
+          const dateKey = currentDate.toISOString().slice(0, 10);
+          const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'short' });
+          
+          // Tasks follow a business cycle - more on weekdays
+          const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+          const totalTasks = isWeekend ? Math.floor(Math.random() * 3) : Math.floor(Math.random() * 8) + 3;
+          
+          placeholderTaskStats.push({
+            name: dayName,
+            date: dateKey,
+            completed: Math.floor(totalTasks * (0.5 + Math.random() * 0.4)),
+            pending: Math.floor(totalTasks * (0.1 + Math.random() * 0.3))
+          });
+        }
+        
+        // Filter the placeholder data to the requested date range
+        const filteredHandoverStats = placeholderHandoverStats.filter(stat => {
+          const statDate = new Date(stat.date);
+          return statDate >= start && statDate <= end;
+        });
+        
+        const filteredIncidentStats = placeholderIncidentStats.filter(stat => {
+          const statDate = new Date(stat.date);
+          return statDate >= start && statDate <= end;
+        });
+        
+        const filteredTaskStats = placeholderTaskStats.filter(stat => {
+          const statDate = new Date(stat.date);
+          return statDate >= start && statDate <= end;
+        });
+        
+        // Generate placeholder handover type distribution
+        const placeholderHandoverTypes = {
+          statutory: Math.floor(filteredHandoverStats.reduce((sum, stat) => sum + stat.completed + stat.pending + stat.attention, 0) * 0.6),
+          nonStatutory: Math.floor(filteredHandoverStats.reduce((sum, stat) => sum + stat.completed + stat.pending + stat.attention, 0) * 0.4)
+        };
+        
+        // Generate placeholder summary metrics
+        const placeholderSummaryMetrics = {
+          safetyMetrics: {
+            highPriorityIncidents: filteredIncidentStats.reduce((sum, stat) => sum + stat.high, 0),
+            safetyCompliance: `${85 + Math.floor(Math.random() * 10)}%`,
+            equipmentReliability: `${80 + Math.floor(Math.random() * 15)}%`
+          },
+          productionMetrics: {
+            shiftEfficiency: `${85 + Math.floor(Math.random() * 10)}%`,
+            taskCompletion: `${75 + Math.floor(Math.random() * 20)}%`,
+            maintenanceAdherence: `${82 + Math.floor(Math.random() * 12)}%`
+          }
+        };
+        
+        res.json({
+          handoverStats: filteredHandoverStats,
+          incidentStats: filteredIncidentStats,
+          taskStats: filteredTaskStats,
+          handoverTypes: [
+            { name: "Statutory", value: placeholderHandoverTypes.statutory },
+            { name: "Non-Statutory", value: placeholderHandoverTypes.nonStatutory }
+          ],
+          summaryMetrics: placeholderSummaryMetrics
+        });
+        
+        return;
+      }
+      
+      // Original logic for real data (for non-Jan-2025 to April-2025 data)
       // Generate handover statistics
       const handoverStats = generateDailyStats(filteredLogs, start, end, (log) => {
         return {
