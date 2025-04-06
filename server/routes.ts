@@ -479,6 +479,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Update incident 
+  app.patch("/api/incidents/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, description, priority, status } = req.body;
+      
+      // At least one field should be provided for update
+      if (!title && !description && !priority && !status) {
+        return res.status(400).json({ message: "At least one field is required for update" });
+      }
+      
+      const incident = await storage.getIncidentById(parseInt(id));
+      if (!incident) {
+        return res.status(404).json({ message: "Incident not found" });
+      }
+      
+      // Create update data object
+      const updateData: any = {};
+      
+      if (title) updateData.title = title;
+      if (description) updateData.description = description;
+      if (priority) {
+        // Validate priority
+        if (!Object.values(IncidentPriority).includes(priority)) {
+          return res.status(400).json({ message: "Invalid priority level" });
+        }
+        updateData.priority = priority;
+      }
+      if (status) {
+        // Validate status
+        if (!Object.values(IncidentStatus).includes(status)) {
+          return res.status(400).json({ message: "Invalid status" });
+        }
+        updateData.status = status;
+      }
+      
+      const updatedIncident = await storage.updateIncident(parseInt(id), updateData);
+      
+      res.json(updatedIncident);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update incident" });
+    }
+  });
+  
   // Resolve incident
   app.patch("/api/incidents/:id/resolve", async (req, res) => {
     try {

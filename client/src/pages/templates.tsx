@@ -60,6 +60,8 @@ export default function Templates() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewTemplateDialogOpen, setIsNewTemplateDialogOpen] = useState(false);
   const [isViewTemplateDialogOpen, setIsViewTemplateDialogOpen] = useState(false);
+  const [isEditTemplateDialogOpen, setIsEditTemplateDialogOpen] = useState(false);
+  const [isDeleteConfirmDialogOpen, setIsDeleteConfirmDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   
   // For the new template form
@@ -102,6 +104,33 @@ export default function Templates() {
       setAiTemplateType("safety");
     },
   });
+  
+  const updateTemplateMutation = useMutation({
+    mutationFn: async (data: { id: number; title: string; type: string; content: string }) => {
+      const res = await apiRequest('PUT', `/api/templates/${data.id}`, {
+        title: data.title,
+        type: data.type,
+        content: data.content
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/templates'] });
+      setIsEditTemplateDialogOpen(false);
+      setSelectedTemplate(null);
+    },
+  });
+  
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest('DELETE', `/api/templates/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/templates'] });
+      setIsDeleteConfirmDialogOpen(false);
+      setSelectedTemplate(null);
+    },
+  });
 
   const handleCreateTemplate = async () => {
     if (!user) return;
@@ -133,6 +162,37 @@ export default function Templates() {
   const handleViewTemplate = (template: Template) => {
     setSelectedTemplate(template);
     setIsViewTemplateDialogOpen(true);
+  };
+  
+  const handleEditTemplate = (template: Template) => {
+    setSelectedTemplate(template);
+    // Set form values for editing
+    setTitle(template.title);
+    setType(template.type);
+    setContent(template.content);
+    setIsEditTemplateDialogOpen(true);
+  };
+  
+  const handleDeleteTemplate = (template: Template) => {
+    setSelectedTemplate(template);
+    setIsDeleteConfirmDialogOpen(true);
+  };
+  
+  const handleUpdateTemplate = async () => {
+    if (!selectedTemplate) return;
+    
+    await updateTemplateMutation.mutateAsync({
+      id: selectedTemplate.id,
+      title,
+      type,
+      content
+    });
+  };
+  
+  const handleConfirmDelete = async () => {
+    if (!selectedTemplate) return;
+    
+    await deleteTemplateMutation.mutateAsync(selectedTemplate.id);
   };
 
   // Filter templates based on activeTab and searchTerm
@@ -235,11 +295,11 @@ export default function Templates() {
                           <Copy className="h-3.5 w-3.5" />
                           <span className="sr-only">Copy</span>
                         </Button>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => handleEditTemplate(template)}>
                           <Edit className="h-3.5 w-3.5" />
                           <span className="sr-only">Edit</span>
                         </Button>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template)}>
                           <Trash className="h-3.5 w-3.5" />
                           <span className="sr-only">Delete</span>
                         </Button>
@@ -405,6 +465,99 @@ export default function Templates() {
             >
               <Copy className="mr-2 h-4 w-4" />
               Copy to Clipboard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Template Dialog */}
+      <Dialog open={isEditTemplateDialogOpen} onOpenChange={setIsEditTemplateDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Template</DialogTitle>
+            <DialogDescription>
+              Update the existing template
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-title">Title</Label>
+              <Input 
+                id="edit-title" 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                placeholder="Template title" 
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-type">Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger id="edit-type">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="safety">Safety</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                  <SelectItem value="incident">Incident</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-content">Content</Label>
+              <Textarea 
+                id="edit-content" 
+                value={content} 
+                onChange={(e) => setContent(e.target.value)} 
+                placeholder="Template content (supports markdown)" 
+                rows={10} 
+              />
+              <p className="text-xs text-muted-foreground">
+                Use markdown syntax for formatting. Example: ## Section Title, *italic*, **bold**
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditTemplateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUpdateTemplate} 
+              disabled={!title || !content || updateTemplateMutation.isPending}
+            >
+              {updateTemplateMutation.isPending ? 'Updating...' : 'Update Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteConfirmDialogOpen} onOpenChange={setIsDeleteConfirmDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Template</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this template? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="rounded-md bg-destructive/10 p-4">
+              <h3 className="font-medium text-destructive">{selectedTemplate?.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Type: <span className="capitalize">{selectedTemplate?.type}</span>
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteConfirmDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDelete}
+              disabled={deleteTemplateMutation.isPending}
+            >
+              {deleteTemplateMutation.isPending ? 'Deleting...' : 'Delete Template'}
             </Button>
           </DialogFooter>
         </DialogContent>
