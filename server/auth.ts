@@ -95,14 +95,32 @@ export function setupAuth(app: Express) {
       const initials = generateInitials(fullName);
       
       // Handle role - ensure it's a number
-      let roleValue = 2; // Default to miner role
+      let roleValue = UserRole.MINER; // Default to miner role
       
       if (role_id !== undefined) {
         roleValue = Number(role_id); // Convert to number
       } else if (role !== undefined) {
-        // For backward compatibility
+        // Map string roles to UserRole enum values
         if (typeof role === 'string') {
-          roleValue = role === 'manager' ? 1 : 2;
+          switch(role) {
+            case 'manager':
+              roleValue = UserRole.MANAGER;
+              break;
+            case 'miner':
+              roleValue = UserRole.MINER;
+              break;
+            case 'operator':
+              roleValue = UserRole.OPERATOR;
+              break;
+            case 'driller':
+              roleValue = UserRole.DRILLER;
+              break;
+            case 'blaster':
+              roleValue = UserRole.BLASTER;
+              break;
+            default:
+              roleValue = UserRole.MINER;
+          }
         } else {
           roleValue = Number(role);
         }

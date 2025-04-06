@@ -10,7 +10,7 @@ interface User {
   id: number;
   username: string;
   fullName: string;
-  role: 'manager' | 'miner';
+  role: number; // Numeric role ID from UserRole enum
   initials: string;
 }
 
@@ -23,14 +23,15 @@ interface RegisterData extends LoginCredentials {
   fullName: string;
   email?: string;
   contact?: string;
-  role?: 'manager' | 'miner';
-  role_id?: number; // New role_id field as a number
+  role?: 'manager' | 'miner' | 'operator' | 'driller' | 'blaster';
+  role_id?: number; // Numeric role ID from UserRole enum
 }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  userRoleName: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
@@ -84,11 +85,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } 
       // Otherwise, if it contains string role, convert it to a number
       else if (data.role !== undefined) {
-        payload.role_id = data.role === 'manager' ? 1 : 2;
+        switch(data.role) {
+          case 'manager': 
+            payload.role_id = 1; // UserRole.MANAGER
+            break;
+          case 'miner': 
+            payload.role_id = 2; // UserRole.MINER
+            break;
+          case 'operator': 
+            payload.role_id = 3; // UserRole.OPERATOR
+            break;
+          case 'driller': 
+            payload.role_id = 4; // UserRole.DRILLER
+            break;
+          case 'blaster': 
+            payload.role_id = 5; // UserRole.BLASTER
+            break;
+          default:
+            payload.role_id = 2; // Default to MINER
+        }
       }
       // If neither is present, default to miner (2)
       else {
-        payload.role_id = 2;
+        payload.role_id = 2; // UserRole.MINER
       }
       
       const res = await apiRequest('POST', '/api/register', payload);
@@ -152,12 +171,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, setLocation]);
 
+  const userRoleName = user ? getRoleName(user.role) : null;
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isLoading: isLoading || loginMutation.isPending || registerMutation.isPending,
         isAuthenticated: !!user,
+        userRoleName,
         login,
         register,
         logout,
@@ -166,6 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+// Helper function to convert numeric role ID to readable string
+export function getRoleName(roleId: number): string {
+  switch(roleId) {
+    case 1: return 'Manager';
+    case 2: return 'Miner';
+    case 3: return 'Operator';
+    case 4: return 'Driller';
+    case 5: return 'Blaster';
+    default: return 'Unknown Role';
+  }
 }
 
 export function useAuth() {

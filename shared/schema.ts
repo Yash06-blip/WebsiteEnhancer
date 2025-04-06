@@ -6,6 +6,9 @@ import { z } from "zod";
 export enum UserRole {
   MANAGER = 1,
   MINER = 2,
+  OPERATOR = 3,
+  DRILLER = 4,
+  BLASTER = 5,
 }
 
 // Shift types enum

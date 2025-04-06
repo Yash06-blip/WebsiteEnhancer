@@ -71,8 +71,8 @@ function NavItem({ href, label, icon }: NavItemProps) {
   
   return (
     <Link href={href}>
-      <a
-        className={`flex items-center space-x-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+      <div
+        className={`flex items-center space-x-2 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
           isActive 
             ? "bg-sidebar-foreground/10" 
             : "hover:bg-sidebar-foreground/10"
@@ -80,7 +80,7 @@ function NavItem({ href, label, icon }: NavItemProps) {
       >
         {icon}
         <span>{label}</span>
-      </a>
+      </div>
     </Link>
   );
 }

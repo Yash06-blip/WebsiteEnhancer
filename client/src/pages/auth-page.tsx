@@ -44,7 +44,7 @@ const registerSchema = z.object({
   fullName: z.string().min(3, { message: "Full name must be at least 3 characters" }),
   email: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal("")),
   contact: z.string().optional().or(z.literal("")),
-  role: z.enum(["manager", "miner"]).default("miner"),
+  role: z.enum(["manager", "miner", "operator", "driller", "blaster"]).default("miner"),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -293,19 +293,43 @@ export default function AuthPage() {
                         <FormItem>
                           <FormLabel>Role</FormLabel>
                           <FormControl>
-                            <div className="flex gap-4">
+                            <div className="grid grid-cols-2 gap-2">
                               <Button
                                 type="button"
                                 variant={field.value === "miner" ? "default" : "outline"}
-                                className="flex-1"
+                                className="w-full"
                                 onClick={() => field.onChange("miner")}
                               >
                                 Miner
                               </Button>
                               <Button
                                 type="button"
+                                variant={field.value === "operator" ? "default" : "outline"}
+                                className="w-full"
+                                onClick={() => field.onChange("operator")}
+                              >
+                                Operator
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={field.value === "driller" ? "default" : "outline"}
+                                className="w-full"
+                                onClick={() => field.onChange("driller")}
+                              >
+                                Driller
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={field.value === "blaster" ? "default" : "outline"}
+                                className="w-full"
+                                onClick={() => field.onChange("blaster")}
+                              >
+                                Blaster
+                              </Button>
+                              <Button
+                                type="button"
                                 variant={field.value === "manager" ? "default" : "outline"}
-                                className="flex-1"
+                                className="w-full col-span-2"
                                 onClick={() => field.onChange("manager")}
                               >
                                 Manager
