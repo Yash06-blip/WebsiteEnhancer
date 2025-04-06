@@ -4,8 +4,11 @@ import { storage } from "./storage";
 import { z } from "zod";
 import { LogStatus, LogType, ShiftType, IncidentPriority, IncidentStatus } from "@shared/schema";
 import { analyzeHandoverContent, generateHandoverRecommendations } from "./ai";
+import { setupAuth } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication
+  setupAuth(app);
   // API Routes
   // Get dashboard stats
   app.get("/api/dashboard/stats", async (req, res) => {

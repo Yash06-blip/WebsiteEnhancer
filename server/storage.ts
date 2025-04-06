@@ -10,8 +10,13 @@ import {
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { db } from "./db";
+import { eq, desc, gt, asc } from "drizzle-orm";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "./db";
 
 const MemoryStore = createMemoryStore(session);
+const PgSessionStore = connectPgSimple(session);
 
 // Define the storage interface with all required CRUD operations
 export interface IStorage {
@@ -531,4 +536,262 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database storage implementation
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.SessionStore;
+
+  constructor() {
+    this.sessionStore = new PgSessionStore({
+      pool,
+      createTableIfMissing: true,
+    });
+  }
+
+  // User operations
+  async getUser(id: number): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
+  // Handover log operations
+  async getHandoverLogs(): Promise<HandoverLog[]> {
+    return db.select().from(handoverLogs).orderBy(desc(handoverLogs.createdAt));
+  }
+
+  async getHandoverLogById(id: number): Promise<HandoverLog | undefined> {
+    const result = await db.select().from(handoverLogs).where(eq(handoverLogs.id, id));
+    return result[0];
+  }
+
+  async getHandoverLogsByUser(userId: number): Promise<HandoverLog[]> {
+    return db.select()
+      .from(handoverLogs)
+      .where(eq(handoverLogs.userId, userId))
+      .orderBy(desc(handoverLogs.createdAt));
+  }
+
+  async createHandoverLog(log: InsertHandoverLog): Promise<HandoverLog> {
+    const now = new Date();
+    const [newLog] = await db
+      .insert(handoverLogs)
+      .values({
+        ...log,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    return newLog;
+  }
+
+  async updateHandoverLog(id: number, logUpdate: Partial<InsertHandoverLog>): Promise<HandoverLog | undefined> {
+    const now = new Date();
+    const [updatedLog] = await db
+      .update(handoverLogs)
+      .set({
+        ...logUpdate,
+        updatedAt: now
+      })
+      .where(eq(handoverLogs.id, id))
+      .returning();
+    return updatedLog;
+  }
+
+  // Incident operations
+  async getIncidents(): Promise<Incident[]> {
+    return db.select().from(incidents).orderBy(desc(incidents.createdAt));
+  }
+
+  async getIncidentById(id: number): Promise<Incident | undefined> {
+    const result = await db.select().from(incidents).where(eq(incidents.id, id));
+    return result[0];
+  }
+
+  async getActiveIncidents(): Promise<Incident[]> {
+    return db.select()
+      .from(incidents)
+      .where(eq(incidents.status, IncidentStatus.ACTIVE))
+      .orderBy(desc(incidents.createdAt));
+  }
+
+  async createIncident(incident: InsertIncident): Promise<Incident> {
+    const now = new Date();
+    const [newIncident] = await db
+      .insert(incidents)
+      .values({
+        ...incident,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    return newIncident;
+  }
+
+  async updateIncident(id: number, incidentUpdate: Partial<InsertIncident>): Promise<Incident | undefined> {
+    const now = new Date();
+    const [updatedIncident] = await db
+      .update(incidents)
+      .set({
+        ...incidentUpdate,
+        updatedAt: now
+      })
+      .where(eq(incidents.id, id))
+      .returning();
+    return updatedIncident;
+  }
+
+  // Task operations
+  async getTasks(): Promise<Task[]> {
+    return db.select().from(tasks).orderBy(desc(tasks.createdAt));
+  }
+
+  async getTaskById(id: number): Promise<Task | undefined> {
+    const result = await db.select().from(tasks).where(eq(tasks.id, id));
+    return result[0];
+  }
+
+  async getTasksByAssignee(userId: number): Promise<Task[]> {
+    return db.select()
+      .from(tasks)
+      .where(eq(tasks.assignedTo, userId))
+      .orderBy(desc(tasks.createdAt));
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    const now = new Date();
+    const [newTask] = await db
+      .insert(tasks)
+      .values({
+        ...task,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    return newTask;
+  }
+
+  async updateTask(id: number, taskUpdate: Partial<InsertTask>): Promise<Task | undefined> {
+    const now = new Date();
+    const [updatedTask] = await db
+      .update(tasks)
+      .set({
+        ...taskUpdate,
+        updatedAt: now
+      })
+      .where(eq(tasks.id, id))
+      .returning();
+    return updatedTask;
+  }
+
+  // Shift operations
+  async getShifts(): Promise<Shift[]> {
+    return db.select().from(shifts).orderBy(asc(shifts.startTime));
+  }
+
+  async getShiftById(id: number): Promise<Shift | undefined> {
+    const result = await db.select().from(shifts).where(eq(shifts.id, id));
+    return result[0];
+  }
+
+  async getUpcomingShifts(limit: number): Promise<Shift[]> {
+    const now = new Date();
+    return db.select()
+      .from(shifts)
+      .where(gt(shifts.startTime, now))
+      .orderBy(asc(shifts.startTime))
+      .limit(limit);
+  }
+
+  async createShift(shift: InsertShift): Promise<Shift> {
+    const [newShift] = await db
+      .insert(shifts)
+      .values(shift)
+      .returning();
+    return newShift;
+  }
+
+  async updateShift(id: number, shiftUpdate: Partial<InsertShift>): Promise<Shift | undefined> {
+    const [updatedShift] = await db
+      .update(shifts)
+      .set(shiftUpdate)
+      .where(eq(shifts.id, id))
+      .returning();
+    return updatedShift;
+  }
+
+  // Template operations
+  async getTemplates(): Promise<Template[]> {
+    return db.select().from(templates).orderBy(asc(templates.type));
+  }
+
+  async getTemplateById(id: number): Promise<Template | undefined> {
+    const result = await db.select().from(templates).where(eq(templates.id, id));
+    return result[0];
+  }
+
+  async getTemplatesByType(type: string): Promise<Template[]> {
+    return db.select()
+      .from(templates)
+      .where(eq(templates.type, type))
+      .orderBy(desc(templates.createdAt));
+  }
+
+  async createTemplate(template: InsertTemplate): Promise<Template> {
+    const now = new Date();
+    const [newTemplate] = await db
+      .insert(templates)
+      .values({
+        ...template,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    return newTemplate;
+  }
+
+  async updateTemplate(id: number, templateUpdate: Partial<InsertTemplate>): Promise<Template | undefined> {
+    const now = new Date();
+    const [updatedTemplate] = await db
+      .update(templates)
+      .set({
+        ...templateUpdate,
+        updatedAt: now
+      })
+      .where(eq(templates.id, id))
+      .returning();
+    return updatedTemplate;
+  }
+
+  // AI analysis operations
+  async getAiAnalysisByLogId(logId: number): Promise<AiAnalysis | undefined> {
+    const result = await db
+      .select()
+      .from(aiAnalysis)
+      .where(eq(aiAnalysis.logId, logId));
+    return result[0];
+  }
+
+  async createAiAnalysis(analysis: InsertAiAnalysis): Promise<AiAnalysis> {
+    const now = new Date();
+    const [newAnalysis] = await db
+      .insert(aiAnalysis)
+      .values({
+        ...analysis,
+        createdAt: now
+      })
+      .returning();
+    return newAnalysis;
+  }
+}
+
+// Use DatabaseStorage instead of MemStorage for production use
+export const storage = new DatabaseStorage();

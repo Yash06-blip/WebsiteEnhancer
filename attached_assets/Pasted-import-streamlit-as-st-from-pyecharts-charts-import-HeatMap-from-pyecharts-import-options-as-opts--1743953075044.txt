@@ -1,0 +1,86 @@
+import streamlit as st
+from pyecharts.charts import HeatMap
+from pyecharts import options as opts
+import random
+import calendar
+from streamlit_echarts import st_pyecharts
+
+
+# Function to generate data for the attendance heatmap
+def generate_attendance_data(year, month, member_name=None):
+    # Modify the seed to include year, month, and member_name for unique data
+    seed_value = f"{year}-{month}-{member_name}"
+    random.seed(seed_value)  # Unique seed for every year, month, and member
+    days_in_month = calendar.monthrange(year, month)[1]
+    data = []
+    for day in range(1, days_in_month + 1):
+        week = (day - 1) // 7  # Group days into weeks
+        weekday = (day - 1) % 7
+        hours_worked = random.randint(0, 12)  # Random hours worked (0 to 12)
+        data.append([weekday, week, hours_worked])  # [Column, Row, Value]
+    return data, days_in_month
+
+
+# Function to create the heatmap chart
+def create_heatmap(data, days_in_month, month_name, title_suffix):
+    heatmap = (
+        HeatMap()
+        .add_xaxis(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"])  # Days of the week
+        .add_yaxis(
+            "Attendance Hours",  # Name of the y-axis
+            ["Week " + str(i + 1) for i in range((days_in_month + 6) // 7)],  # Label for each week
+            data,  # Data (in the correct format)
+            label_opts=opts.LabelOpts(is_show=True)
+        )
+        .set_global_opts(
+            title_opts=opts.TitleOpts(
+                title=f"Attendance Heatmap - {month_name} {title_suffix}",
+                pos_top="10%",  # Move title slightly below the top
+                pos_left="center",  # Center align the title
+            ),
+            visualmap_opts=opts.VisualMapOpts(
+                max_=12,
+                min_=0,
+                orient="horizontal",  # Horizontal legend
+                pos_left="center",  # Center align the legend
+                pos_bottom="5%",  # Position the legend below the heatmap
+            ),
+            xaxis_opts=opts.AxisOpts(name="Day of Week", type_="category"),
+            yaxis_opts=opts.AxisOpts(name="Week", type_="category"),
+        )
+        .set_series_opts(
+            label_opts=opts.LabelOpts(is_show=True)  # Ensure labels are visible
+        )
+    )
+    return heatmap
+
+
+# Function to show the attendance heatmap
+def display_attendance_heatmap():
+    st.title("Manager Dashboard - Attendance Heatmap")
+
+    # Get user inputs for the month and year
+    year = st.sidebar.number_input("Enter Year", value=2024, min_value=2000, max_value=2100)
+    month = st.sidebar.number_input("Enter Month (1-12)", value=12, min_value=1, max_value=12)
+    month_name = calendar.month_name[month]
+
+    # Role-based filtering
+    st.sidebar.subheader("Filter Options")
+    role = st.sidebar.selectbox("Select Role", ["Manager", "Team Member"])
+
+    if role == "Manager":
+        title_suffix = "- Manager Attendance"
+        data, days_in_month = generate_attendance_data(year, month, "Manager")
+        heatmap = create_heatmap(data, days_in_month, month_name, title_suffix)
+        st_pyecharts(heatmap)
+
+    elif role == "Team Member":
+        team_members = ["Vedant Wuike", "Ayush Chawale", "Chinmay Khodankar"]  # Example team member names
+        member_name = st.sidebar.selectbox("Select Team Member", team_members)
+        title_suffix = f"- {member_name}'s Attendance"
+        data, days_in_month = generate_attendance_data(year, month, member_name)
+        heatmap = create_heatmap(data, days_in_month, month_name, title_suffix)
+        st_pyecharts(heatmap)
+
+
+

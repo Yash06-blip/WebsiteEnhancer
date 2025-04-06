@@ -1,0 +1,90 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import random
+
+# Function to generate attendance data
+def generate_attendance_data():
+    random.seed(42)  # Ensure reproducibility
+    data = {
+        "Date": pd.date_range(start="2024-01-01", end="2024-12-31", freq="D"),
+        # Generate statuses with weighted probabilities
+        "Status": random.choices(
+            ["Present", "Absent", "Late", "Excused"],
+            weights=[0.7, 0.15, 0.1, 0.05],  # Probabilities: 70% Present, 15% Absent, 10% Late, 5% Excused
+            k=366,  # Number of days in 2024
+        ),
+        "Role": random.choices(
+            ["Manager", "Vedant Wuike", "Ayush Chawale", "Chinmay Khodankar"],  # Example roles/members
+            weights=[0.2, 0.3, 0.3, 0.2],  # Adjust weights as needed
+            k=366,
+        )
+    }
+    return pd.DataFrame(data)
+
+# Function to display the attendance pie chart
+def display_attendance_piechart():
+    # Generate the attendance data
+    df = generate_attendance_data()
+    df["Month"] = df["Date"].dt.month_name()
+    df["Week"] = df["Date"].dt.isocalendar().week
+    df["Year"] = df["Date"].dt.year
+
+    st.title("Attendance Dashboard")
+    st.sidebar.header("Filter Options")
+
+    # Role filter
+    role = st.sidebar.selectbox("Select Role", ["Manager", "Team Member"])
+    if role == "Team Member":
+        team_members = df["Role"].unique().tolist()
+        team_members.remove("Manager")  # Exclude manager from team members
+        selected_member = st.sidebar.selectbox("Select Team Member", team_members)
+        filtered_data = df[df["Role"] == selected_member]
+        title_suffix = f"{selected_member}'s Attendance"
+    else:  # Manager
+        filtered_data = df[df["Role"] == "Manager"]
+        title_suffix = "Manager Attendance"
+
+    # View type filter
+    view_type = st.sidebar.selectbox("View by", ["Weekly", "Monthly", "Yearly"])
+    st.sidebar.markdown("---")
+
+    if view_type == "Weekly":
+        week_number = st.sidebar.number_input("Select Week Number", min_value=1, max_value=52, value=1)
+        filtered_data = filtered_data[filtered_data["Week"] == week_number]
+        title = f"Attendance for Week {week_number} - {title_suffix}"
+
+    elif view_type == "Monthly":
+        month_name = st.sidebar.selectbox("Select Month", df["Month"].unique())
+        filtered_data = filtered_data[filtered_data["Month"] == month_name]
+        title = f"Attendance for {month_name} - {title_suffix}"
+
+    else:  # Yearly
+        year = st.sidebar.selectbox("Select Year", df["Year"].unique())
+        filtered_data = filtered_data[filtered_data["Year"] == year]
+        title = f"Attendance for {year} - {title_suffix}"
+
+    # Calculate attendance counts
+    attendance_counts = filtered_data["Status"].value_counts().reset_index()
+    attendance_counts.columns = ["Status", "Count"]
+
+    # Create the pie chart
+    fig = px.pie(
+        attendance_counts,
+        values="Count",
+        names="Status",
+        title=title,
+        color="Status",
+        color_discrete_map={
+            "Present": "green",
+            "Absent": "red",
+            "Late": "orange",
+            "Excused": "blue"
+        },
+        hole=0.3  # Donut chart
+    )
+
+    fig.update_traces(textinfo="percent+label", hoverinfo="label+percent+value")
+    st.plotly_chart(fig)
+
+

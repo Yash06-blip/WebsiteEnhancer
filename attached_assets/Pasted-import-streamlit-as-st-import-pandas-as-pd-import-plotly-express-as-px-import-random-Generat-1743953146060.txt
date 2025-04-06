@@ -1,0 +1,91 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import random
+
+# Generate sample safety incidents data
+random.seed(42)
+incident_data = {
+    "Date": pd.date_range(start="2024-01-01", end="2024-12-31", freq="W"),  # Weekly incidents
+    "Category": random.choices(
+        ["Slip/Fall", "Equipment Failure", "Health Issue", "Other"],
+        weights=[0.4, 0.3, 0.2, 0.1],
+        k=52
+    ),
+    "Severity": random.choices(
+        ["Low", "Moderate", "High", "Critical"],
+        weights=[0.5, 0.3, 0.15, 0.05],
+        k=52
+    ),
+    "Description": [
+        f"Incident {i}" for i in range(1, 53)
+    ]
+}
+
+# Convert to DataFrame
+df_incidents = pd.DataFrame(incident_data)
+
+# Add a duration of one day for each incident to make the timeline visible
+df_incidents["End Date"] = df_incidents["Date"] + pd.Timedelta(days=1)
+
+# Safety Incidents Timeline function for Streamlit
+def display_incident_report():
+    st.title("Safety Incidents Timeline")
+    st.sidebar.header("Filter Options")
+
+    # Sidebar filters
+    categories = st.sidebar.multiselect(
+        "Select Incident Categories",
+        options=df_incidents["Category"].unique(),
+        default=df_incidents["Category"].unique()
+    )
+    severities = st.sidebar.multiselect(
+        "Select Incident Severities",
+        options=df_incidents["Severity"].unique(),
+        default=df_incidents["Severity"].unique()
+    )
+    st.sidebar.markdown("---")
+
+    # Filter DataFrame
+    filtered_data = df_incidents[(
+        df_incidents["Category"].isin(categories)) &
+        (df_incidents["Severity"].isin(severities))
+    ]
+
+    # Plot the timeline
+    fig = px.timeline(
+        filtered_data,
+        x_start="Date",
+        x_end="End Date",
+        y="Category",
+        color="Severity",
+        title="Safety Incidents Timeline",
+        hover_data=["Description"],
+        color_discrete_map={
+            "Low": "green",
+            "Moderate": "yellow",
+            "High": "orange",
+            "Critical": "red"
+        }
+    )
+
+    # Format the x-axis to display the date in dd-mm-yyyy format
+    fig.update_xaxes(
+        tickformat="%d-%m-%Y",  # Date format: day-month-year
+        title="Date"
+    )
+
+    # Update y-axis
+    fig.update_yaxes(title="Incident Category")
+
+    # Update layout
+    fig.update_layout(showlegend=True)
+
+    # Render the plot
+    st.plotly_chart(fig)
+
+    # Display the filtered data
+    st.subheader("Filtered Incidents Data")
+    st.dataframe(filtered_data)
+
+# This function can now be called from another script or component within your Streamlit app.

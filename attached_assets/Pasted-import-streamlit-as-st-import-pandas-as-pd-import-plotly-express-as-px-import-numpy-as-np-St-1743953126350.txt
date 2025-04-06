@@ -1,0 +1,142 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import numpy as np
+
+# Step 1: Generate Productivity Data for Miners and Manager
+months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November",
+          "December"]
+years = [2020, 2021, 2022, 2023, 2024]
+roles = ["Miner 1", "Miner 2", "Miner 3", "Manager"]  # Example roles
+
+# Generate random productivity data between 10% and 100% for each role, month, and year
+np.random.seed(42)  # For reproducibility
+productivity_data = {
+    "Month": [],
+    "Year": [],
+    "Role": [],
+    "Productivity (%)": []
+}
+
+for year in years:
+    for month in months:
+        for role in roles:
+            productivity_data["Month"].append(month)
+            productivity_data["Year"].append(year)
+            productivity_data["Role"].append(role)
+            # Random productivity between 10% and 100%
+            productivity_data["Productivity (%)"].append(np.random.randint(10, 101))
+
+df_productivity = pd.DataFrame(productivity_data)
+
+# Calculate manager's productivity as the aggregate of all miners in the team
+df_aggregate = (
+    df_productivity[df_productivity["Role"] != "Manager"]
+    .groupby(["Month", "Year"])
+    .agg({"Productivity (%)": "mean"})
+    .reset_index()
+)
+df_aggregate["Role"] = "Manager"
+
+# Replace manager's productivity in the original dataset with aggregated values
+df_productivity = df_productivity[df_productivity["Role"] != "Manager"]
+df_productivity = pd.concat([df_productivity, df_aggregate], ignore_index=True)
+
+# Step 2: Generate Yearly Productivity Data
+df_yearly = df_productivity.groupby(["Year", "Role"])["Productivity (%)"].mean().reset_index()
+
+# Productivity function for Streamlit
+def display_productivity_graph():
+    st.title("Productivity Dashboard")
+
+    # Role filter (Manager or Miner)
+    role_filter = st.sidebar.selectbox("Select Role", ["Manager", "Miner"])
+
+    if role_filter == "Manager":
+        st.subheader("Manager Productivity (Aggregate of Team)")
+
+        # Filter manager data
+        manager_data = df_productivity[df_productivity["Role"] == "Manager"]
+
+        # Display Monthly Productivity Data for Manager
+        st.subheader("Monthly Productivity (Manager)")
+        fig_monthly_manager = px.bar(
+            manager_data,
+            x="Month",
+            y="Productivity (%)",
+            color="Year",
+            title="Monthly Productivity by Year (Manager)",
+            labels={"Month": "Month", "Productivity (%)": "Productivity (%)"},
+            color_discrete_sequence=px.colors.qualitative.Set2
+        )
+        fig_monthly_manager.update_layout(
+            xaxis_title="Month",
+            yaxis_title="Productivity (%)",
+            barmode='group'
+        )
+        st.plotly_chart(fig_monthly_manager)
+
+        # Display Yearly Average Productivity for Manager
+        st.subheader("Yearly Average Productivity (Manager)")
+        yearly_manager_data = df_yearly[df_yearly["Role"] == "Manager"]
+        fig_yearly_manager = px.bar(
+            yearly_manager_data,
+            x="Year",
+            y="Productivity (%)",
+            title="Yearly Average Productivity (Manager)",
+            labels={"Year": "Year", "Productivity (%)": "Average Productivity (%)"},
+            color="Productivity (%)",
+            color_continuous_scale=px.colors.sequential.Blues
+        )
+        fig_yearly_manager.update_layout(
+            xaxis_title="Year",
+            yaxis_title="Average Productivity (%)",
+            xaxis={'type': 'category'}
+        )
+        st.plotly_chart(fig_yearly_manager)
+
+    elif role_filter == "Miner":
+        st.subheader("Miner Productivity")
+
+        # Filter miner data
+        miner_data = df_productivity[df_productivity["Role"] != "Manager"]
+
+        # Display Monthly Productivity Data for Miners
+        st.subheader("Monthly Productivity (Miners)")
+        fig_monthly_miners = px.bar(
+            miner_data,
+            x="Month",
+            y="Productivity (%)",
+            color="Role",
+            facet_col="Year",
+            title="Monthly Productivity by Year and Miner",
+            labels={"Month": "Month", "Productivity (%)": "Productivity (%)"},
+            color_discrete_sequence=px.colors.qualitative.Set1
+        )
+        fig_monthly_miners.update_layout(
+            xaxis_title="Month",
+            yaxis_title="Productivity (%)",
+            barmode='group'
+        )
+        st.plotly_chart(fig_monthly_miners)
+
+        # Display Yearly Average Productivity for Miners
+        st.subheader("Yearly Average Productivity (Miners)")
+        yearly_miner_data = df_yearly[df_yearly["Role"] != "Manager"]
+        fig_yearly_miners = px.bar(
+            yearly_miner_data,
+            x="Year",
+            y="Productivity (%)",
+            color="Role",
+            title="Yearly Average Productivity by Miner",
+            labels={"Year": "Year", "Productivity (%)": "Average Productivity (%)"},
+            color_discrete_sequence=px.colors.qualitative.Dark2
+        )
+        fig_yearly_miners.update_layout(
+            xaxis_title="Year",
+            yaxis_title="Average Productivity (%)",
+            xaxis={'type': 'category'}
+        )
+        st.plotly_chart(fig_yearly_miners)
+
+
