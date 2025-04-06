@@ -17,11 +17,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 
 export function RecentHandovers() {
   const { handovers, isLoading } = useHandovers();
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   // Get the 4 most recent handovers
   const recentHandovers = handovers.slice(0, 4);

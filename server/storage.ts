@@ -6,7 +6,7 @@ import {
   shifts, type Shift, type InsertShift,
   templates, type Template, type InsertTemplate,
   aiAnalysis, type AiAnalysis, type InsertAiAnalysis,
-  LogStatus, IncidentStatus
+  LogStatus, IncidentStatus, IncidentPriority, ShiftType, LogType
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
