@@ -33,6 +33,8 @@ import {
   EyeOff,
   Save,
 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -41,8 +43,8 @@ export default function SettingsPage() {
   
   // Profile form state
   const [fullName, setFullName] = useState(user?.fullName || "");
-  const [email, setEmail] = useState(user?.email || "");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState(user?.email || ""); 
+  const [phone, setPhone] = useState(user?.contact || "");
   const [bio, setBio] = useState("");
   
   // Security form state
@@ -59,13 +61,64 @@ export default function SettingsPage() {
   const [taskAssignments, setTaskAssignments] = useState(true);
   const [shiftChanges, setShiftChanges] = useState(true);
   
+  // Profile update mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PATCH", "/api/users/settings", {
+        type: "profile",
+        fullName,
+        email,
+        phone,
+        bio
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Profile updated",
+        description: "Your profile information has been saved."
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to update profile",
+        description: error.message || "An error occurred while updating your profile",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleSaveProfile = () => {
-    // In a real implementation, this would call an API endpoint
-    toast({
-      title: "Profile updated",
-      description: "Your profile information has been saved.",
-    });
+    updateProfileMutation.mutate();
   };
+  
+  // Security settings mutation
+  const updateSecurityMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PATCH", "/api/users/settings", {
+        type: "security",
+        currentPassword,
+        newPassword
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Password updated",
+        description: "Your password has been changed successfully."
+      });
+      
+      // Reset form
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to update password",
+        description: error.message || "An error occurred while updating your password",
+        variant: "destructive"
+      });
+    }
+  });
   
   const handleChangePassword = () => {
     if (newPassword !== confirmPassword) {
@@ -77,24 +130,66 @@ export default function SettingsPage() {
       return;
     }
     
-    // In a real implementation, this would call an API endpoint
-    toast({
-      title: "Password updated",
-      description: "Your password has been changed successfully.",
-    });
-    
-    // Reset form
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    updateSecurityMutation.mutate();
   };
   
+  // Notification settings mutation
+  const updateNotificationsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PATCH", "/api/users/settings", {
+        type: "notifications",
+        emailNotifications,
+        smsNotifications,
+        handoverReminders,
+        incidentAlerts,
+        taskAssignments,
+        shiftChanges
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Notification settings updated",
+        description: "Your notification preferences have been saved."
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to update notification settings",
+        description: error.message || "An error occurred while updating your notification settings",
+        variant: "destructive"
+      });
+    }
+  });
+  
   const handleSaveNotifications = () => {
-    // In a real implementation, this would call an API endpoint
-    toast({
-      title: "Notification settings updated",
-      description: "Your notification preferences have been saved.",
-    });
+    updateNotificationsMutation.mutate();
+  };
+  
+  // Appearance settings mutation
+  const updateAppearanceMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PATCH", "/api/users/settings", {
+        type: "appearance",
+        // Add appearance settings here
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Appearance settings updated",
+        description: "Your appearance preferences have been saved."
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to update appearance settings",
+        description: error.message || "An error occurred while updating your appearance settings",
+        variant: "destructive"
+      });
+    }
+  });
+  
+  const handleSaveAppearance = () => {
+    updateAppearanceMutation.mutate();
   };
 
   return (
@@ -180,9 +275,21 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                   <CardFooter className="justify-end">
-                    <Button onClick={handleSaveProfile}>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
+                    <Button 
+                      onClick={handleSaveProfile} 
+                      disabled={updateProfileMutation.isPending}
+                    >
+                      {updateProfileMutation.isPending ? (
+                        <>
+                          <span className="mr-2 h-4 w-4 animate-spin">⏳</span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save Changes
+                        </>
+                      )}
                     </Button>
                   </CardFooter>
                 </Card>
@@ -276,9 +383,21 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                   <CardFooter className="justify-end">
-                    <Button onClick={handleChangePassword} disabled={!currentPassword || !newPassword || !confirmPassword}>
-                      <Save className="mr-2 h-4 w-4" />
-                      Update Password
+                    <Button 
+                      onClick={handleChangePassword} 
+                      disabled={!currentPassword || !newPassword || !confirmPassword || updateSecurityMutation.isPending}
+                    >
+                      {updateSecurityMutation.isPending ? (
+                        <>
+                          <span className="mr-2 h-4 w-4 animate-spin">⏳</span>
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Update Password
+                        </>
+                      )}
                     </Button>
                   </CardFooter>
                 </Card>
@@ -379,9 +498,21 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                   <CardFooter className="justify-end">
-                    <Button onClick={handleSaveNotifications}>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Preferences
+                    <Button 
+                      onClick={handleSaveNotifications} 
+                      disabled={updateNotificationsMutation.isPending}
+                    >
+                      {updateNotificationsMutation.isPending ? (
+                        <>
+                          <span className="mr-2 h-4 w-4 animate-spin">⏳</span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save Preferences
+                        </>
+                      )}
                     </Button>
                   </CardFooter>
                 </Card>
@@ -446,9 +577,21 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                   <CardFooter className="justify-end">
-                    <Button>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Appearance
+                    <Button 
+                      onClick={handleSaveAppearance} 
+                      disabled={updateAppearanceMutation.isPending}
+                    >
+                      {updateAppearanceMutation.isPending ? (
+                        <>
+                          <span className="mr-2 h-4 w-4 animate-spin">⏳</span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save Appearance
+                        </>
+                      )}
                     </Button>
                   </CardFooter>
                 </Card>

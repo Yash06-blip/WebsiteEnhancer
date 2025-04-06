@@ -12,6 +12,8 @@ interface User {
   fullName: string;
   role: number; // Numeric role ID from UserRole enum
   initials: string;
+  email?: string | null;
+  contact?: string | null;
 }
 
 interface LoginCredentials {
@@ -192,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 // Helper function to convert numeric role ID to readable string
-export function getRoleName(roleId: number): string {
+function getRoleName(roleId: number): string {
   switch(roleId) {
     case 1: return 'Manager';
     case 2: return 'Miner';
