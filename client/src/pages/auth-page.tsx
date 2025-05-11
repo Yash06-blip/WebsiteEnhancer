@@ -13,12 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Form,
   FormControl,
@@ -33,18 +28,34 @@ import { Loader2, LogIn, UserPlus } from "lucide-react";
 
 // Schema for login form
 const loginSchema = z.object({
-  username: z.string().min(3, { message: "Username must be at least 3 characters" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  username: z
+    .string()
+    .min(3, { message: "Username must be at least 3 characters" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
 });
 
 // Schema for registration form
 const registerSchema = z.object({
-  username: z.string().min(3, { message: "Username must be at least 3 characters" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-  fullName: z.string().min(3, { message: "Full name must be at least 3 characters" }),
-  email: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal("")),
+  username: z
+    .string()
+    .min(3, { message: "Username must be at least 3 characters" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
+  fullName: z
+    .string()
+    .min(3, { message: "Full name must be at least 3 characters" }),
+  email: z
+    .string()
+    .email({ message: "Please enter a valid email address" })
+    .optional()
+    .or(z.literal("")),
   contact: z.string().optional().or(z.literal("")),
-  role: z.enum(["manager", "miner", "operator", "driller", "blaster"]).default("miner"),
+  role: z
+    .enum(["manager", "miner", "operator", "driller", "blaster"])
+    .default("miner"),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -101,7 +112,7 @@ export default function AuthPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight">MineShift Pro</h1>
+          <h1 className="text-3xl font-bold tracking-tight">MineX</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Coal Mine Management System
           </p>
@@ -121,7 +132,9 @@ export default function AuthPage() {
           <CardContent>
             <Tabs
               value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "login" | "register")}
+              onValueChange={(value) =>
+                setActiveTab(value as "login" | "register")
+              }
               className="w-full"
             >
               <TabsList className="grid w-full grid-cols-2">
@@ -173,7 +186,11 @@ export default function AuthPage() {
                       )}
                     />
 
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
                       {isLoading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
@@ -296,7 +313,11 @@ export default function AuthPage() {
                             <div className="grid grid-cols-2 gap-2">
                               <Button
                                 type="button"
-                                variant={field.value === "miner" ? "default" : "outline"}
+                                variant={
+                                  field.value === "miner"
+                                    ? "default"
+                                    : "outline"
+                                }
                                 className="w-full"
                                 onClick={() => field.onChange("miner")}
                               >
@@ -304,7 +325,11 @@ export default function AuthPage() {
                               </Button>
                               <Button
                                 type="button"
-                                variant={field.value === "operator" ? "default" : "outline"}
+                                variant={
+                                  field.value === "operator"
+                                    ? "default"
+                                    : "outline"
+                                }
                                 className="w-full"
                                 onClick={() => field.onChange("operator")}
                               >
@@ -312,7 +337,11 @@ export default function AuthPage() {
                               </Button>
                               <Button
                                 type="button"
-                                variant={field.value === "driller" ? "default" : "outline"}
+                                variant={
+                                  field.value === "driller"
+                                    ? "default"
+                                    : "outline"
+                                }
                                 className="w-full"
                                 onClick={() => field.onChange("driller")}
                               >
@@ -320,7 +349,11 @@ export default function AuthPage() {
                               </Button>
                               <Button
                                 type="button"
-                                variant={field.value === "blaster" ? "default" : "outline"}
+                                variant={
+                                  field.value === "blaster"
+                                    ? "default"
+                                    : "outline"
+                                }
                                 className="w-full"
                                 onClick={() => field.onChange("blaster")}
                               >
@@ -328,7 +361,11 @@ export default function AuthPage() {
                               </Button>
                               <Button
                                 type="button"
-                                variant={field.value === "manager" ? "default" : "outline"}
+                                variant={
+                                  field.value === "manager"
+                                    ? "default"
+                                    : "outline"
+                                }
                                 className="w-full col-span-2"
                                 onClick={() => field.onChange("manager")}
                               >
@@ -341,7 +378,11 @@ export default function AuthPage() {
                       )}
                     />
 
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
                       {isLoading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
